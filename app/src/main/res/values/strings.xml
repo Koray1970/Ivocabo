@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">Ivocabo</string>
+    <string name="signupTitle">Sign Up</string>
+    <string name="username">Username</string>
+    <string name="email">Email</string>
+    <string name="required">* required</string>
+    <string name="password">Password</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="limit">Limit</string>
+    <string name="signin">Sign in</string>
+    <string name="signinTitle">Sign In</string>
+    <string name="rgResultDialogTitle">User Registration</string>
+    <string name="rgResultDialogContent">Congratulations, your membership process has been completed successfully, please sign in.</string>
+    <string name="deviceformTitle">Ivocabo Device Form</string>
+    <string name="name">Name</string>
+    <string name="macaddress">Mac Address</string>
+    <string name="t3device">T3</string>
+    <string name="e9device">E9</string>
+    <string name="title_activity_splash">SplashActivity</string>
+</resources>
