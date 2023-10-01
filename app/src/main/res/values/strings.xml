@@ -18,4 +18,14 @@
     <string name="t3device">T3</string>
     <string name="e9device">E9</string>
     <string name="title_activity_splash">SplashActivity</string>
+    <string name="mac001">Mac Address is not valid, Please check again.</string>
+    <!--Start::Add Device Remote Event Error Messages-->
+    <string name="DR015">Can not add new device to database!</string>
+    <string name="DR015_3">This device is still used!</string>
+    <string name="DR015_2">Mac address is not valid!</string>
+    <string name="DR018">New mac address is not valid!</string>
+    <string name="DR017">Device can not be updated!</string>
+    <string name="DR013">User not found!</string>
+    <string name="DR010">DeviceAddUpdate general exception</string>
+    <!--End::Add Device Remote Event Error Messages-->
 </resources>

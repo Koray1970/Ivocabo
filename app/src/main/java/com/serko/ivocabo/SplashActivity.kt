@@ -24,6 +24,5 @@ class SplashActivity : ComponentActivity() {
             startActivity(intent)
             finish()
         }
-
     }
 }

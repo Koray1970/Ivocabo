@@ -22,6 +22,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,7 +37,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -46,12 +46,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BottomSheetScaffold
-import androidx.compose.material3.BottomSheetScaffoldState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DismissDirection
-import androidx.compose.material3.DismissValue
 import androidx.compose.material3.DismissValue.*
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FabPosition
@@ -64,6 +62,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismiss
 import androidx.compose.material3.Text
@@ -74,22 +73,22 @@ import androidx.compose.material3.rememberDismissState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -100,14 +99,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.toUpperCase
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -118,13 +117,17 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
 import com.serko.ivocabo.api.IApiService
 import com.serko.ivocabo.data.Device
+import com.serko.ivocabo.data.FormActionResultFlag
+import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
 import com.serko.ivocabo.data.User
 import com.serko.ivocabo.data.userViewModel
 import com.serko.ivocabo.location.LocationViewModel
 import com.serko.ivocabo.location.PermissionEvent
 import com.serko.ivocabo.location.ViewState
+import com.serko.ivocabo.remote.device.addupdate.DeviceAddUpdateRequest
 import com.serko.ivocabo.remote.membership.EventResult
+import com.serko.ivocabo.remote.membership.EventResultFlags
 import com.serko.ivocabo.remote.membership.SignInRequest
 import com.serko.ivocabo.remote.membership.SignInResponse
 import com.serko.ivocabo.remote.membership.SignUpRequest
@@ -149,6 +152,7 @@ import java.util.Locale
 //koko
 //koko@gmail.com
 //123456
+@Suppress("DEPRECATION")
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
@@ -176,9 +180,7 @@ class MainActivity : ComponentActivity() {
                     val composeProgressDialogStatus = remember { mutableStateOf(false) }
 
                     val navController = rememberNavController()
-                    NavHost(
-                        navController = navController, startDestination = Screen.Signup.route
-                    ) {
+                    NavHost(navController = navController, startDestination = Screen.Signup.route) {
                         composable(Screen.Signup.route) {
                             Signup(
                                 navController, composeProgressDialogStatus
@@ -196,6 +198,12 @@ class MainActivity : ComponentActivity() {
                                 composeProgressDialogStatus
                             )
                         }
+                        composable(Screen.DeviceDashboard.route) {
+                            DeviceDashboard(
+                                navController,
+                                composeProgressDialogStatus
+                            )
+                        }
                     }
                     ComposeProgress(composeProgressDialogStatus)
                 }
@@ -203,7 +211,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    fun hideSystemUI() {
+    private fun hideSystemUI() {
 
         //Hides the ugly action bar at the top
         actionBar?.hide()
@@ -318,7 +326,7 @@ fun ComposeProgress(dialogshow: MutableState<Boolean>) {
         AlertDialog(onDismissRequest = { dialogshow.value = false }, properties = DialogProperties(
             usePlatformDefaultWidth = false
         ), content = {
-            Surface(modifier = Modifier.fillMaxSize(), color = Color.Transparent) {
+            Surface(modifier = Modifier.fillMaxSize(), color = Color.Black.copy(alpha = .7f)) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
@@ -338,10 +346,10 @@ val formTitle =
     TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
 
 @SuppressLint("CoroutineCreationDuringComposition")
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Dashboard(
-    navController: NavController,
+    navController: NavController= rememberNavController(),
     composeProgressStatus: MutableState<Boolean>,
     userviewModel: userViewModel = hiltViewModel(),
     localtionViewModel: LocationViewModel = hiltViewModel(),
@@ -352,9 +360,8 @@ fun Dashboard(
     val scope = rememberCoroutineScope()
 
     userviewModel.getDbDeviceList()
-    var dbDeviceList = remember { mutableStateListOf<Device>() }
-    dbDeviceList = userviewModel.devicelist.toMutableStateList()
-
+    var ddd = userviewModel.devicelist.observeAsState()
+    var dbDeviceList = ddd.value
 
     //start:Map Properties
     val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
@@ -365,13 +372,14 @@ fun Dashboard(
     val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
     LaunchedEffect(Unit) {
         currentLoc.collect {
-            val _geopint = GeoPoint(it.latitude, it.longitude)
-            cameraState.geoPoint = _geopint
-            mapMarkerState.geoPoint = _geopint
+            val geopoint = GeoPoint(it.latitude, it.longitude)
+            cameraState.geoPoint = geopoint
+            mapMarkerState.geoPoint = geopoint
         }
         delay(300)
         localtionViewModel.stopLocation()
         composeProgressStatus.value = false
+
     }
 
 
@@ -383,7 +391,7 @@ fun Dashboard(
         .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
     //end:Map Properties
     //start::Device Form assets
-    var tDevice = Device(null, "", null, "", null, null, null, null, null, null)
+    val tDevice = Device(null, "", null, "", null, null, null, null, null, null)
 
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -409,8 +417,13 @@ fun Dashboard(
         FloatingActionButton(
             onClick = {
                 scope.launch {
+                    composeProgressStatus.value = true
+                    delay(300)
                     localtionViewModel.startLocation()
                     deviceFormScaffoldState.bottomSheetState.expand()
+                    if (deviceFormScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded) {
+                        composeProgressStatus.value = false
+                    }
                 }
             },
             content = {
@@ -436,15 +449,16 @@ fun Dashboard(
                     .fillMaxSize()
                     .background(Color.Black)
             ) {
-                itemsIndexed(dbDeviceList) {index, dd ->
+                itemsIndexed(dbDeviceList!!.toList()) { _, dd ->
                     var deviceDismissShow by remember { mutableStateOf(true) }
-                    val deviceDismissState = rememberDismissState(confirmValueChange = {
-                        if (it == DismissValue.DismissedToStart || it == DismissValue.DismissedToEnd) {
-
-                            deviceDismissShow = false
-                            true
-                        } else false
-                    }, positionalThreshold = { 150f })
+                    val deviceDismissState =
+                        rememberDismissState(confirmValueChange = { dismissValue ->
+                            if (dismissValue == DismissedToStart || dismissValue == DismissedToEnd) {
+                                deviceDismissShow = false
+                                navController.navigate(Screen.Dashboard.route)
+                                true
+                            } else false
+                        }, positionalThreshold = { 150f })
                     AnimatedVisibility(deviceDismissShow, exit = fadeOut(spring())) {
                         SwipeToDismiss(
                             state = deviceDismissState,
@@ -466,7 +480,7 @@ fun Dashboard(
                                 }
                                 val boxIconScale by animateFloatAsState(
                                     targetValue =
-                                    if (deviceDismissState.targetValue == DismissValue.Default)
+                                    if (deviceDismissState.targetValue == Default)
                                         .8f else 1.2f, label = ""
                                 )
                                 val boxAlignment =
@@ -491,9 +505,12 @@ fun Dashboard(
                             },
                             dismissContent = {
                                 Card(
-                                    shape = RoundedCornerShape(0.dp)
+                                    Modifier.clickable {
+                                        navController.navigate(Screen.Signin.route)
+                                    },
+                                    shape = RoundedCornerShape(0.dp),
 
-                                ) {
+                                    ) {
                                     ListItem(
                                         leadingContent = {
                                             var deviceIcon = R.drawable.t3_icon_32
@@ -507,7 +524,7 @@ fun Dashboard(
                                         },
                                         headlineContent = {
                                             Text(
-                                                text = dd.name!!.toUpperCase(Locale.ROOT),
+                                                text = dd.name.uppercase(Locale.ROOT),
                                                 style = TextStyle(
                                                     color = Color.DarkGray,
                                                     fontWeight = FontWeight.ExtraBold,
@@ -517,7 +534,7 @@ fun Dashboard(
                                         },
                                         supportingContent = {
                                             Text(
-                                                text = dd.macaddress!!.toUpperCase(Locale.ROOT),
+                                                text = dd.macaddress.uppercase(Locale.ROOT),
                                                 style = TextStyle(
                                                     color = Color.Gray,
                                                     fontWeight = FontWeight.SemiBold,
@@ -540,6 +557,7 @@ fun Dashboard(
         scaffoldState = deviceFormScaffoldState,
         sheetPeekHeight = 0.dp,
         sheetContent = {
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -602,6 +620,7 @@ fun Dashboard(
                 }
                 Spacer(modifier = Modifier.height(20.dp))
                 Row {
+                    var obsAddEdit = userviewModel.mutablelivedataRMEventResult.observeAsState()
                     Button(
                         onClick = {
                             deviceName = ""
@@ -615,10 +634,10 @@ fun Dashboard(
                     )
                     Button(
                         onClick = {
-                            keyboardController!!.hide()
                             scope.launch {
+                                composeProgressStatus.value = true
+                                keyboardController!!.hide()
                                 localtionViewModel.startLocation()
-
                                 tDevice.name = deviceName
                                 tDevice.macaddress = deviceMacaddress
                                 tDevice.devicetype = selectedOption.value.id
@@ -626,23 +645,42 @@ fun Dashboard(
                                 tDevice.longitude = currentLoc.value.longitude.toString()
                                 tDevice.registerdate = helper.getNOWasString()
 
-                                if (userviewModel.addUpdateDevice(tDevice)) {
-                                    scope.launch {
-                                        Log.v("Dashboard","${dbDeviceList.size}")
-                                        composeProgressStatus.value=true
-                                        if(dbDeviceList.add(tDevice)) {
-                                            delay(200)
-                                            Log.v("Dashboard1","${dbDeviceList.size}")
-                                            composeProgressStatus.value = false
+                                userviewModel.addUpdateDevice(tDevice)
+
+                                when (obsAddEdit.value?.stateStatus) {
+                                    RMEventStatus.Complete -> {
+                                        deviceName = ""
+                                        deviceMacaddress = ""
+
+                                        selectedOption = mutableStateOf(devicelist.first())
+                                        onOptionSelected(mutableStateOf(devicelist.first()))
+
+                                        scope.launch {
+                                            if (dbDeviceList!!.toMutableList().add(tDevice)) {
+                                                composeProgressStatus.value = false
+                                            }
+                                            delay(400)
+                                            deviceFormScaffoldState.bottomSheetState.partialExpand()
                                         }
                                     }
 
-                                    deviceName = ""
-                                    deviceMacaddress = ""
+                                    RMEventStatus.Exception -> {
+                                        composeProgressStatus.value = false
+                                        var formEventRes=obsAddEdit.value?.formEventResult
+                                        if (formEventRes != null) {
+                                            if (formEventRes.error != null) {
+                                                Toast.makeText(
+                                                    context,
+                                                    formEventRes.error!!.exception,
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        }
+                                    }
 
-                                    selectedOption = mutableStateOf(devicelist.first())
-                                    onOptionSelected(mutableStateOf(devicelist.first()))
-                                    deviceFormScaffoldState.bottomSheetState.partialExpand()
+                                    else -> {
+                                        composeProgressStatus.value = true
+                                    }
                                 }
                             }
                         },
@@ -673,17 +711,16 @@ fun SignIn(
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         val countofUser = userviewModel.getCountofUser()
-        if (countofUser != null)
-            if (countofUser > 0) {
-                var user = userviewModel.fetchUser()
-                if (!user.token.isNullOrEmpty())
-                    navController.navigate(Screen.Dashboard.route)
-            }
+        if (countofUser > 0) {
+            val user = userviewModel.fetchUser()
+            if (!user.token.isNullOrEmpty())
+                navController.navigate(Screen.Dashboard.route)
+        }
     }
 
     val context = LocalContext.current.applicationContext
     val formHelper = SignUpFormHelper()
-    val security = Security()
+
     var usernameVal by remember { mutableStateOf("") }
     var usernameError by remember { mutableStateOf(false) }
     val usernameLimit = 64
@@ -691,7 +728,7 @@ fun SignIn(
     var passwordVisible by remember { mutableStateOf(true) }
     var passwordError by remember { mutableStateOf(false) }
     val passwordLimit = 16
-    var required = context.getString(R.string.required)
+    val required = context.getString(R.string.required)
     val limit = context.getString(R.string.limit)
     Surface(modifier = Modifier.padding(horizontal = 20.dp)) {
         Column(
@@ -801,30 +838,26 @@ fun SignIn(
                                     response: Response<SignInResponse>,
                                 ) {
                                     if (response.isSuccessful) {
-                                        var rmResult = response.body()!!
+                                        val rmResult = response.body()!!
                                         scope.launch {
                                             val countOfUser = userviewModel.getCountofUser()
 
-                                            if (countOfUser!! > 0) {
-                                                var user = userviewModel.fetchUser()
+                                            if (countOfUser > 0) {
+                                                val user = userviewModel.fetchUser()
                                                 user.token = rmResult.token
                                                 userviewModel.updateUser(user)
                                             } else {
-                                                val _username = rmResult.username!!
-                                                val _email = rmResult.email!!
+                                                val username = rmResult.username!!
+                                                val email = rmResult.email!!
                                                 userviewModel.insertUser(
                                                     User(
                                                         0,
                                                         helper.getNOWasSQLDate(),
-                                                        _username,
-                                                        _email,
+                                                        username,
+                                                        email,
                                                         rmResult.token,
                                                         if (rmResult.devicelist != null) {
-                                                            if (rmResult.devicelist?.size!! >= 0) {
-                                                                gson.toJson(rmResult.devicelist)
-                                                            } else {
-                                                                null
-                                                            }
+                                                            gson.toJson(rmResult.devicelist)
                                                         } else {
                                                             null
                                                         }
@@ -878,14 +911,14 @@ fun Signup(
     val countOfUser = userviewModel.getCountofUser()
 
     if (countOfUser > 0) {
-        var user = userviewModel.fetchUser()
-        if (user != null) {
-            composeProgressStatus.value = false
-            if (!user.token.isNullOrEmpty())
-                navController.navigate(Screen.Dashboard.route)
-            else
-                navController.navigate(Screen.Signin.route)
-        }
+        val user = userviewModel.fetchUser()
+
+        composeProgressStatus.value = false
+        if (!user.token.isNullOrEmpty())
+            navController.navigate(Screen.Dashboard.route)
+        else
+            navController.navigate(Screen.Signin.route)
+
     } else {
 
         val context = LocalContext.current.applicationContext
@@ -906,7 +939,7 @@ fun Signup(
         var passwordVisible by remember { mutableStateOf(true) }
         var passwordError by remember { mutableStateOf(false) }
         val passwordLimit = 16
-        var required = context.getString(R.string.required)
+        val required = context.getString(R.string.required)
         val limit = context.getString(R.string.limit)
         composeProgressStatus.value = false
         //remote result open dialog
@@ -1057,14 +1090,14 @@ fun Signup(
 
                                 IApiService.getInstance()
                                 val apiSrv = IApiService.apiService
-                                val call: Call<EventResult>? = apiSrv!!.srvSignUp(
+                                val call: Call<EventResult> = apiSrv!!.srvSignUp(
                                     SignUpRequest(
                                         emailVal,
                                         passwordVal,
                                         usernameVal
                                     )
                                 )
-                                call!!.enqueue(object : Callback<EventResult> {
+                                call.enqueue(object : Callback<EventResult> {
                                     override fun onResponse(
                                         call: Call<EventResult>,
                                         response: Response<EventResult>,
@@ -1091,10 +1124,10 @@ fun Signup(
                                                 }
                                             } else {
                                                 if (response.body()!!.error != null) {
-                                                    val _error = response.body()!!.error!!
+                                                    val eRror = response.body()!!.error!!
                                                     Toast.makeText(
                                                         context,
-                                                        "Error Code : ${_error.code}, Exception: ${_error.exception}",
+                                                        "Error Code : ${eRror.code}, Exception: ${eRror.exception}",
                                                         Toast.LENGTH_LONG
                                                     ).show()
                                                 }
@@ -1169,6 +1202,22 @@ fun LocaationRationaleAlert(onDismiss: () -> Unit, onConfirm: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+fun DeviceDashboard(
+    navController: NavController =rememberNavController(),
+    composeProgressStatus: MutableState<Boolean>,
+    userviewModel: userViewModel = hiltViewModel()
+) {
+
+    try {
+        composeProgressStatus.value = false
+    }
+    catch (ex:Exception){
+        Log.v("MainExep","${ex.message}")
+    }
+    Text("Dashboard")
 }
 
 /*@Preview(showBackground = true)

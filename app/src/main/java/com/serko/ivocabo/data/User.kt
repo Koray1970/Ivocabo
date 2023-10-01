@@ -1,8 +1,8 @@
 package com.serko.ivocabo.data
 
-import android.util.Log
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.mutableStateOf
+import android.bluetooth.BluetoothAdapter
+import android.content.Context
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -17,24 +17,18 @@ import androidx.room.Query
 import androidx.room.Update
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.serko.ivocabo.Helper
+import com.serko.ivocabo.R
 import com.serko.ivocabo.api.IApiService
 import com.serko.ivocabo.remote.device.addupdate.DeviceAddUpdateRequest
-import com.serko.ivocabo.remote.device.list.DeviceListResponse
 import com.serko.ivocabo.remote.membership.EventResult
 import com.serko.ivocabo.remote.membership.EventResultFlags
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.count
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -126,11 +120,16 @@ class UserRepository @Inject constructor(private val userDao: UserDao) {
 }
 
 @HiltViewModel
-class userViewModel @Inject constructor(private val repo: UserRepository) : ViewModel() {
+class userViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val repo: UserRepository
+) : ViewModel() {
+    val helper = Helper()
     val gson = Gson()
     var user: User?
     var isUserSignIn = MutableStateFlow(false)
-    var devicelist = mutableListOf<Device>()
+    var devicelist = MutableLiveData<List<Device>>()
+    var mutablelivedataRMEventResult = MutableLiveData<RMEventResult<Boolean>>()
 
     init {
         user = repo.fetchUser()
@@ -186,11 +185,12 @@ class userViewModel @Inject constructor(private val repo: UserRepository) : View
             var dbdevices = repo.getDevices()
             if (dbdevices != null) {
                 if (dbdevices.length > 0) {
-                    devicelist= gson.fromJson<ArrayList<Device>>(
-                        dbdevices,
-                        object : TypeToken<ArrayList<Device>>() {}.type
-                    ).toMutableList()
-
+                    devicelist = MutableLiveData<List<Device>>(
+                        gson.fromJson<List<Device>>(
+                            dbdevices,
+                            object : TypeToken<List<Device>>() {}.type
+                        )
+                    )
                 }
             }
         } catch (e: Exception) {
@@ -198,65 +198,112 @@ class userViewModel @Inject constructor(private val repo: UserRepository) : View
         }
     }
 
-    fun addUpdateDevice(device: Device): Boolean {
+    fun addUpdateDevice(device: Device) {
+        var funResult = FormActionResult<Boolean>(false)
+        var rmEventResult = RMEventResult<Boolean>(false)
+        rmEventResult.stateStatus = RMEventStatus.Initial
+        mutablelivedataRMEventResult.postValue(rmEventResult)
         try {
-            user = repo.fetchUser()
-            if (!user!!.devices.isNullOrBlank()) {
-                var gDeviceList =
-                    gson.fromJson<ArrayList<Device>>(
-                        user!!.devices,
-                        object : TypeToken<ArrayList<Device>>() {}.type
-                    )
-                var currentDevice = gDeviceList!!.find { it.macaddress == device.macaddress }
-                if (currentDevice != null) {
-                    gDeviceList.remove(currentDevice)
-                    gDeviceList.add(device)
-                    user!!.devices = gson.toJson(gDeviceList)
+            if (BluetoothAdapter.checkBluetoothAddress(helper.formatedMacAddress(device.macaddress))) {
+                user = repo.fetchUser()
+                if (!user!!.devices.isNullOrBlank()) {
+                    var gDeviceList =
+                        gson.fromJson<ArrayList<Device>>(
+                            user!!.devices,
+                            object : TypeToken<ArrayList<Device>>() {}.type
+                        )
+                    var currentDevice = gDeviceList!!.find { it.macaddress == device.macaddress }
+                    if (currentDevice != null) {
+                        gDeviceList.remove(currentDevice)
+                        gDeviceList.add(device)
+                        user!!.devices = gson.toJson(gDeviceList)
+                    } else {
+                        gDeviceList.add(device)
+                        user!!.devices = gson.toJson(gDeviceList)
+                    }
                 } else {
-                    gDeviceList.add(device)
-                    user!!.devices = gson.toJson(gDeviceList)
+                    var dList = ArrayList<Device>()
+                    dList.add(device)
+                    user!!.devices = gson.toJson(dList)
                 }
-            } else {
-                var dList = ArrayList<Device>()
-                dList.add(device)
-                user!!.devices = gson.toJson(dList)
-            }
-            repo.updateUser(user!!)
-            //device to remote db
-            if (IApiService.apiService == null)
-                IApiService.getInstance()
-            val apiSrv = IApiService.apiService
+                repo.updateUser(user!!)
+                rmEventResult.stateStatus = RMEventStatus.Running
+                mutablelivedataRMEventResult.postValue(rmEventResult)
+                //device to remote db
+                if (IApiService.apiService == null)
+                    IApiService.getInstance()
+                val apiSrv = IApiService.apiService
 
-            val dEviceRequest = DeviceAddUpdateRequest(
-                null, device.devicetype, device.ismissing,
-                device.istracking, device.latitude, device.longitude,
-                device.macaddress, device.name, device.newmacaddress
-            )
-
-            val call: Call<EventResult> =
-                apiSrv?.srvAddUpdateDevice("Bearer ${user?.token!!} ", dEviceRequest)!!
-            call!!.enqueue(object : Callback<EventResult> {
-                override fun onResponse(
-                    call: Call<EventResult>,
-                    response: Response<EventResult>,
-                ) {
-                    if (response.isSuccessful) {
-                        var rmResult = response.body()!!
-                        if (rmResult.eventresultflag == EventResultFlags.SUCCESS.flag) {
-
+                val dEviceRequest = DeviceAddUpdateRequest(
+                    null, device.devicetype, device.ismissing,
+                    device.istracking, device.latitude, device.longitude,
+                    device.macaddress, device.name, device.newmacaddress
+                )
+                val call: Call<EventResult> =
+                    apiSrv?.srvAddUpdateDevice("Bearer ${user?.token!!} ", dEviceRequest)!!
+                call.enqueue(object : Callback<EventResult> {
+                    override fun onResponse(
+                        call: Call<EventResult>,
+                        response: Response<EventResult>
+                    ) {
+                        if (response.isSuccessful) {
+                            if(response.body()?.eventresultflag ==EventResultFlags.SUCCESS.flag){
+                                getDbDeviceList()
+                                funResult.result = true
+                                funResult.resultFlag = FormActionResultFlag.Success
+                            }
+                            else{
+                                funResult.error = FormActionError()
+                                var eMessage = ""
+                                when (funResult.error?.code) {
+                                    "DR015" -> eMessage = context.getString(R.string.DR015)
+                                    "DR015.3" -> eMessage = context.getString(R.string.DR015_3)
+                                    "DR015.2" -> eMessage = context.getString(R.string.DR015_2)
+                                    "DR018" -> eMessage = context.getString(R.string.DR018)
+                                    "DR017" -> eMessage = context.getString(R.string.DR017)
+                                    "DR013" -> eMessage = context.getString(R.string.DR013)
+                                    else -> eMessage = funResult.error?.exception.toString()
+                                }
+                                funResult.error?.code = funResult.error?.code
+                                funResult.error?.exception = eMessage
+                            }
+                            rmEventResult.formEventResult=funResult
+                            rmEventResult.stateStatus = RMEventStatus.Complete
+                            mutablelivedataRMEventResult.postValue(rmEventResult)
                         }
                     }
-                }
 
-                override fun onFailure(call: Call<EventResult>, t: Throwable) {
+                    override fun onFailure(call: Call<EventResult>, t: Throwable) {
+                        rmEventResult.stateStatus = RMEventStatus.Complete
+                        funResult.error = FormActionError()
+                        funResult.error?.exception = "Web Api bağlantı sorunu!"
+                        rmEventResult.formEventResult=funResult
+                        mutablelivedataRMEventResult.postValue(rmEventResult)
+                    }
 
-                }
-            })
-            return true
+                })
+            } else {
+                funResult.error = FormActionError()
+                funResult.error?.code = "mac001"
+                funResult.error?.exception = context.getString(R.string.mac001)
+                rmEventResult.formEventResult=funResult
+                rmEventResult.stateStatus = RMEventStatus.Complete
+                mutablelivedataRMEventResult.postValue(rmEventResult)
+            }
         } catch (e: Exception) {
-            Log.v("userViewModel.addUpdateDevice", "Exception : ${e.message}")
+            funResult.error = FormActionError()
+            funResult.error?.code = "000UVM001"
+            funResult.error?.exception = e.message
+            rmEventResult.formEventResult=funResult
+            rmEventResult.stateStatus = RMEventStatus.Exception
+            mutablelivedataRMEventResult.postValue(rmEventResult)
         }
-        return false
     }
+}
+
+enum class RMEventStatus { Initial, Running, Complete, Exception }
+class RMEventResult<T>(t: T) {
+    var stateStatus: RMEventStatus = RMEventStatus.Running
+    var formEventResult: FormActionResult<T>? = null
 }
 
