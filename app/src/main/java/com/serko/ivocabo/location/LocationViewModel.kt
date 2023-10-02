@@ -1,58 +1,91 @@
 package com.serko.ivocabo.location
 
+import android.content.Context
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.model.LatLng
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-@HiltViewModel
-class LocationViewModel @Inject constructor(
-    private val getLocationUseCase: GetLocationUseCase
-):ViewModel() {
-    private val _viewState: MutableStateFlow<ViewState> = MutableStateFlow(ViewState.Loading)
-    val viewState = _viewState.asStateFlow()
+interface ILocationRepository {
+    suspend fun GetCurrentLocation()
+    suspend fun StopLocationUpdate()
+}
 
-    fun stopLocation(){
-        getLocationUseCase.stop()
-    }
-    fun startLocation(){
-        viewModelScope.launch {
-            getLocationUseCase.invoke().collect {
-                _viewState.value = ViewState.Success(it)
-            }
+class LocationRepository @Inject constructor(@ApplicationContext private val context: Context) :
+    ILocationRepository {
+    private lateinit var locationProvider: FusedLocationProviderClient
+    private lateinit var locationCallback: LocationCallback
+    var latlang = MutableStateFlow(LatLng(0.0, 0.0))
+
+    init {
+        MainScope().launch {
+            GetCurrentLocation()
         }
     }
-    fun handle(event: PermissionEvent) {
-        when (event) {
-            PermissionEvent.Granted -> {
-                viewModelScope.launch {
-                    getLocationUseCase.invoke().collect {
-                        _viewState.value = ViewState.Success(it)
 
+    override suspend fun GetCurrentLocation() {
+        try {
+            locationProvider = LocationServices.getFusedLocationProviderClient(context)
+            locationCallback = object : LocationCallback() {
+                override fun onLocationResult(p0: LocationResult) {
+                    if (p0.lastLocation != null) {
+                        MainScope().launch {
+                            latlang.emit(
+                                LatLng(
+                                    p0.lastLocation!!.latitude,
+                                    p0.lastLocation!!.longitude
+                                )
+                            )
+                        }
                     }
+                    super.onLocationResult(p0)
                 }
             }
+        } catch (e: Exception) {
 
-            /*PermissionEvent.Revoked -> {
+        }
+    }
 
-            }*/
+    override suspend fun StopLocationUpdate() {
+        try {
+            locationProvider.removeLocationUpdates(locationCallback)
+        } catch (e: Exception) {
 
-            else -> {_viewState.value = ViewState.RevokedPermissions}
         }
     }
 }
-sealed interface ViewState {
-    object Loading : ViewState
-    data class Success(val location: LatLng?) : ViewState
-    object RevokedPermissions : ViewState
-}
 
-sealed interface PermissionEvent {
-    object Granted : PermissionEvent
-    object Revoked : PermissionEvent
+@HiltViewModel
+class LocationViewModel @Inject constructor(private val locRepo: LocationRepository) : ViewModel() {
+    var latlang = MutableStateFlow(LatLng(0.0, 0.0))
+    init {
+        getCurrentLocation()
+    }
+
+    fun getCurrentLocation() {
+        viewModelScope.launch {
+            locRepo.GetCurrentLocation()
+            latlang.emit(locRepo.latlang.value)
+        }
+    }
+
+    fun stopLocationUpdate() {
+        viewModelScope.launch {
+            locRepo.StopLocationUpdate()
+        }
+    }
 }

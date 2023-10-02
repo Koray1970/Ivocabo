@@ -2,7 +2,6 @@ package com.serko.ivocabo.data
 
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
-import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -78,7 +77,6 @@ interface UserDao {
 
 class UserRepository @Inject constructor(private val userDao: UserDao) {
     var user = MutableStateFlow<User>(userDao.fetchUser())
-    var devices = MutableStateFlow<String?>(userDao.getDevices())
 
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
     fun insertUser(user: User) {
@@ -128,8 +126,9 @@ class userViewModel @Inject constructor(
     val gson = Gson()
     var user: User?
     var isUserSignIn = MutableStateFlow(false)
-    var devicelist = MutableLiveData<List<Device>>()
-    var mutablelivedataRMEventResult = MutableLiveData<RMEventResult<Boolean>>()
+    var devicelist = mutableListOf<Device>()
+    var mutablelivedataRMEventResult =
+        MutableStateFlow<RMEventResult<Boolean>>(RMEventResult(false))
 
     init {
         user = repo.fetchUser()
@@ -185,12 +184,10 @@ class userViewModel @Inject constructor(
             var dbdevices = repo.getDevices()
             if (dbdevices != null) {
                 if (dbdevices.length > 0) {
-                    devicelist = MutableLiveData<List<Device>>(
-                        gson.fromJson<List<Device>>(
-                            dbdevices,
-                            object : TypeToken<List<Device>>() {}.type
-                        )
-                    )
+                    devicelist = gson.fromJson<List<Device>>(
+                        dbdevices,
+                        object : TypeToken<List<Device>>() {}.type
+                    ).toMutableList()
                 }
             }
         } catch (e: Exception) {
@@ -199,104 +196,154 @@ class userViewModel @Inject constructor(
     }
 
     fun addUpdateDevice(device: Device) {
-        var funResult = FormActionResult<Boolean>(false)
-        var rmEventResult = RMEventResult<Boolean>(false)
-        rmEventResult.stateStatus = RMEventStatus.Initial
-        mutablelivedataRMEventResult.postValue(rmEventResult)
-        try {
-            if (BluetoothAdapter.checkBluetoothAddress(helper.formatedMacAddress(device.macaddress))) {
-                user = repo.fetchUser()
-                if (!user!!.devices.isNullOrBlank()) {
-                    var gDeviceList =
-                        gson.fromJson<ArrayList<Device>>(
-                            user!!.devices,
-                            object : TypeToken<ArrayList<Device>>() {}.type
-                        )
-                    var currentDevice = gDeviceList!!.find { it.macaddress == device.macaddress }
-                    if (currentDevice != null) {
-                        gDeviceList.remove(currentDevice)
-                        gDeviceList.add(device)
-                        user!!.devices = gson.toJson(gDeviceList)
+        viewModelScope.launch {
+            var funResult = FormActionResult<Boolean>(false)
+            var rmEventResult = RMEventResult<Boolean>(false)
+            rmEventResult.stateStatus = RMEventStatus.Initial
+            mutablelivedataRMEventResult.emit(rmEventResult)
+            try {
+                if (BluetoothAdapter.checkBluetoothAddress(helper.formatedMacAddress(device.macaddress))) {
+                    user = repo.fetchUser()
+                    if (!user!!.devices.isNullOrBlank()) {
+                        var gDeviceList =
+                            gson.fromJson<ArrayList<Device>>(
+                                user!!.devices,
+                                object : TypeToken<ArrayList<Device>>() {}.type
+                            )
+                        var currentDevice =
+                            gDeviceList!!.find { it.macaddress == device.macaddress }
+                        if (currentDevice != null) {
+                            gDeviceList.remove(currentDevice)
+                            gDeviceList.add(device)
+                            user!!.devices = gson.toJson(gDeviceList)
+                        } else {
+                            gDeviceList.add(device)
+                            user!!.devices = gson.toJson(gDeviceList)
+                        }
                     } else {
-                        gDeviceList.add(device)
-                        user!!.devices = gson.toJson(gDeviceList)
+                        var dList = ArrayList<Device>()
+                        dList.add(device)
+                        user!!.devices = gson.toJson(dList)
                     }
+                    repo.updateUser(user!!)
+                    rmEventResult.stateStatus = RMEventStatus.Running
+                    mutablelivedataRMEventResult.emit(rmEventResult)
+                    //device to remote db
+                    if (IApiService.apiService == null)
+                        IApiService.getInstance()
+                    val apiSrv = IApiService.apiService
+
+                    val dEviceRequest = DeviceAddUpdateRequest(
+                        null, device.devicetype, device.ismissing,
+                        device.istracking, device.latitude, device.longitude,
+                        device.macaddress, device.name, device.newmacaddress
+                    )
+                    val call: Call<EventResult> =
+                        apiSrv?.srvAddUpdateDevice("Bearer ${user?.token!!} ", dEviceRequest)!!
+                    call.enqueue(object : Callback<EventResult> {
+                        override fun onResponse(
+                            call: Call<EventResult>,
+                            response: Response<EventResult>
+                        ) {
+                            if (response.isSuccessful) {
+                                if (response.body()?.eventresultflag == EventResultFlags.SUCCESS.flag) {
+                                    getDbDeviceList()
+                                    funResult.result = true
+                                    funResult.resultFlag = FormActionResultFlag.Success
+                                } else {
+                                    funResult.error = FormActionError()
+                                    var eMessage = ""
+                                    when (funResult.error?.code) {
+                                        "DR015" -> eMessage = context.getString(R.string.DR015)
+                                        "DR015.3" -> eMessage = context.getString(R.string.DR015_3)
+                                        "DR015.2" -> eMessage = context.getString(R.string.DR015_2)
+                                        "DR018" -> eMessage = context.getString(R.string.DR018)
+                                        "DR017" -> eMessage = context.getString(R.string.DR017)
+                                        "DR013" -> eMessage = context.getString(R.string.DR013)
+                                        else -> eMessage = funResult.error?.exception.toString()
+                                    }
+                                    funResult.error?.code = funResult.error?.code
+                                    funResult.error?.exception = eMessage
+                                }
+                                viewModelScope.launch {
+                                    rmEventResult.formEventResult = funResult
+                                    rmEventResult.stateStatus = RMEventStatus.Complete
+                                    mutablelivedataRMEventResult.emit(rmEventResult)
+                                }
+                            }
+                        }
+
+                        override fun onFailure(call: Call<EventResult>, t: Throwable) {
+                            viewModelScope.launch {
+                                rmEventResult.stateStatus = RMEventStatus.Complete
+                                funResult.error = FormActionError()
+                                funResult.error?.exception = "Web Api bağlantı sorunu!"
+                                rmEventResult.formEventResult = funResult
+                                mutablelivedataRMEventResult.emit(rmEventResult)
+                            }
+                        }
+
+                    })
                 } else {
-                    var dList = ArrayList<Device>()
-                    dList.add(device)
-                    user!!.devices = gson.toJson(dList)
+                    funResult.error = FormActionError()
+                    funResult.error?.code = "mac001"
+                    funResult.error?.exception = context.getString(R.string.mac001)
+                    rmEventResult.formEventResult = funResult
+                    rmEventResult.stateStatus = RMEventStatus.Complete
+                    mutablelivedataRMEventResult.emit(rmEventResult)
                 }
+            } catch (e: Exception) {
+                funResult.error = FormActionError()
+                funResult.error?.code = "000UVM001"
+                funResult.error?.exception = e.message
+                rmEventResult.formEventResult = funResult
+                rmEventResult.stateStatus = RMEventStatus.Exception
+                mutablelivedataRMEventResult.emit(rmEventResult)
+            }
+        }
+    }
+
+    fun DeleteDevice(device: Device) {
+        viewModelScope.launch {
+            var gDeviceList =
+                gson.fromJson<ArrayList<Device>>(
+                    user!!.devices,
+                    object : TypeToken<ArrayList<Device>>() {}.type
+                )
+            if (gDeviceList.size > 0) {
+                gDeviceList.remove(device)
+                user!!.devices = gson.toJson(gDeviceList)
                 repo.updateUser(user!!)
-                rmEventResult.stateStatus = RMEventStatus.Running
-                mutablelivedataRMEventResult.postValue(rmEventResult)
-                //device to remote db
+
                 if (IApiService.apiService == null)
                     IApiService.getInstance()
                 val apiSrv = IApiService.apiService
 
-                val dEviceRequest = DeviceAddUpdateRequest(
-                    null, device.devicetype, device.ismissing,
-                    device.istracking, device.latitude, device.longitude,
-                    device.macaddress, device.name, device.newmacaddress
-                )
+
                 val call: Call<EventResult> =
-                    apiSrv?.srvAddUpdateDevice("Bearer ${user?.token!!} ", dEviceRequest)!!
+                    apiSrv?.srvDeviceRemove(
+                        "Bearer ${user?.token!!} ",
+                        macaddress = device.macaddress
+                    )!!
                 call.enqueue(object : Callback<EventResult> {
                     override fun onResponse(
                         call: Call<EventResult>,
                         response: Response<EventResult>
                     ) {
                         if (response.isSuccessful) {
-                            if(response.body()?.eventresultflag ==EventResultFlags.SUCCESS.flag){
+                            if (response.body()?.eventresultflag == EventResultFlags.SUCCESS.flag) {
                                 getDbDeviceList()
-                                funResult.result = true
-                                funResult.resultFlag = FormActionResultFlag.Success
                             }
-                            else{
-                                funResult.error = FormActionError()
-                                var eMessage = ""
-                                when (funResult.error?.code) {
-                                    "DR015" -> eMessage = context.getString(R.string.DR015)
-                                    "DR015.3" -> eMessage = context.getString(R.string.DR015_3)
-                                    "DR015.2" -> eMessage = context.getString(R.string.DR015_2)
-                                    "DR018" -> eMessage = context.getString(R.string.DR018)
-                                    "DR017" -> eMessage = context.getString(R.string.DR017)
-                                    "DR013" -> eMessage = context.getString(R.string.DR013)
-                                    else -> eMessage = funResult.error?.exception.toString()
-                                }
-                                funResult.error?.code = funResult.error?.code
-                                funResult.error?.exception = eMessage
-                            }
-                            rmEventResult.formEventResult=funResult
-                            rmEventResult.stateStatus = RMEventStatus.Complete
-                            mutablelivedataRMEventResult.postValue(rmEventResult)
                         }
                     }
 
                     override fun onFailure(call: Call<EventResult>, t: Throwable) {
-                        rmEventResult.stateStatus = RMEventStatus.Complete
-                        funResult.error = FormActionError()
-                        funResult.error?.exception = "Web Api bağlantı sorunu!"
-                        rmEventResult.formEventResult=funResult
-                        mutablelivedataRMEventResult.postValue(rmEventResult)
-                    }
+                        viewModelScope.launch {
 
+                        }
+                    }
                 })
-            } else {
-                funResult.error = FormActionError()
-                funResult.error?.code = "mac001"
-                funResult.error?.exception = context.getString(R.string.mac001)
-                rmEventResult.formEventResult=funResult
-                rmEventResult.stateStatus = RMEventStatus.Complete
-                mutablelivedataRMEventResult.postValue(rmEventResult)
             }
-        } catch (e: Exception) {
-            funResult.error = FormActionError()
-            funResult.error?.code = "000UVM001"
-            funResult.error?.exception = e.message
-            rmEventResult.formEventResult=funResult
-            rmEventResult.stateStatus = RMEventStatus.Exception
-            mutablelivedataRMEventResult.postValue(rmEventResult)
         }
     }
 }

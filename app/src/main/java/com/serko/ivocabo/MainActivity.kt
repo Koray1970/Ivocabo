@@ -73,10 +73,8 @@ import androidx.compose.material3.rememberDismissState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -88,7 +86,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -105,8 +102,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -117,17 +112,12 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
 import com.serko.ivocabo.api.IApiService
 import com.serko.ivocabo.data.Device
-import com.serko.ivocabo.data.FormActionResultFlag
 import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
 import com.serko.ivocabo.data.User
 import com.serko.ivocabo.data.userViewModel
 import com.serko.ivocabo.location.LocationViewModel
-import com.serko.ivocabo.location.PermissionEvent
-import com.serko.ivocabo.location.ViewState
-import com.serko.ivocabo.remote.device.addupdate.DeviceAddUpdateRequest
 import com.serko.ivocabo.remote.membership.EventResult
-import com.serko.ivocabo.remote.membership.EventResultFlags
 import com.serko.ivocabo.remote.membership.SignInRequest
 import com.serko.ivocabo.remote.membership.SignInResponse
 import com.serko.ivocabo.remote.membership.SignUpRequest
@@ -170,7 +160,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         setContent {
-            GetCurrentLocation()
+
             IvocaboTheme {
                 // A surface container using the 'background' color from the theme
 
@@ -232,92 +222,7 @@ class MainActivity : ComponentActivity() {
 }
 
 val helper = Helper()
-var currentLoc = MutableStateFlow(LatLng(0.0, 0.0))
-
-@OptIn(ExperimentalPermissionsApi::class)
-@Composable
-fun GetCurrentLocation(locationViewModel: LocationViewModel = hiltViewModel()) {
-    val context = LocalContext.current.applicationContext
-    val viewState by locationViewModel.viewState.collectAsState()
-    val permissionState = rememberMultiplePermissionsState(
-        permissions = listOf(
-            ACCESS_FINE_LOCATION,
-            ACCESS_COARSE_LOCATION
-        )
-    )
-    LaunchedEffect(!context.hasLocationPermission()) {
-        permissionState.launchMultiplePermissionRequest()
-    }
-
-    when {
-        permissionState.allPermissionsGranted -> {
-            LaunchedEffect(Unit) {
-                locationViewModel.handle(PermissionEvent.Granted)
-            }
-        }
-
-        permissionState.shouldShowRationale -> {
-            LocaationRationaleAlert(onDismiss = { }) {
-                permissionState.launchMultiplePermissionRequest()
-            }
-        }
-
-        !permissionState.allPermissionsGranted && !permissionState.shouldShowRationale -> {
-            LaunchedEffect(Unit) {
-                locationViewModel.handle(PermissionEvent.Revoked)
-            }
-        }
-    }
-
-    with(viewState) {
-        when (this) {
-            ViewState.Loading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
-
-            ViewState.RevokedPermissions -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("We need permissions to use this app")
-                    Button(
-                        onClick = {
-                            context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                        },
-                        enabled = !context.hasLocationPermission()
-                    ) {
-                        if (context.hasLocationPermission()) CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            color = Color.White
-                        )
-                        else Text("Settings")
-                    }
-                }
-            }
-
-            is ViewState.Success -> {
-                currentLoc.value =
-                    LatLng(
-                        this.location?.latitude ?: 0.0,
-                        this.location?.longitude ?: 0.0
-                    )
-                Log.v(
-                    "MAINTAG",
-                    "Location : ${currentLoc.value.latitude} - ${currentLoc.value.longitude}"
-                )
-            }
-        }
-    }
-}
+var currentLocation = mutableStateOf(LatLng(0.0, 0.0))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -349,40 +254,34 @@ val formTitle =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Dashboard(
-    navController: NavController= rememberNavController(),
+    navController: NavController = rememberNavController(),
     composeProgressStatus: MutableState<Boolean>,
     userviewModel: userViewModel = hiltViewModel(),
-    localtionViewModel: LocationViewModel = hiltViewModel(),
+    locationViewModel: LocationViewModel = hiltViewModel()
 ) {
 
     val context = LocalContext.current.applicationContext
 
+    var currentLocationState = locationViewModel.latlang.collectAsState()
+    currentLocation = remember { mutableStateOf(currentLocationState.value) }
+
     val scope = rememberCoroutineScope()
 
     userviewModel.getDbDeviceList()
-    var ddd = userviewModel.devicelist.observeAsState()
-    var dbDeviceList = ddd.value
+    val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
 
     //start:Map Properties
-    val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
     val cameraState = rememberCameraState {
         geoPoint = GeoPoint(0.0, 0.0)
         zoom = 19.0 // optional, default is 5.0
     }
     val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
     LaunchedEffect(Unit) {
-        currentLoc.collect {
-            val geopoint = GeoPoint(it.latitude, it.longitude)
-            cameraState.geoPoint = geopoint
-            mapMarkerState.geoPoint = geopoint
-        }
-        delay(300)
-        localtionViewModel.stopLocation()
-        composeProgressStatus.value = false
+        val geopoint = GeoPoint(currentLocation.value.latitude, currentLocation.value.longitude)
+        cameraState.geoPoint = geopoint
+        mapMarkerState.geoPoint = geopoint
 
     }
-
-
     var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
     mapProperties = mapProperties
         .copy(isTilesScaledToDpi = true)
@@ -390,6 +289,7 @@ fun Dashboard(
         .copy(isEnableRotationGesture = false)
         .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
     //end:Map Properties
+
     //start::Device Form assets
     val tDevice = Device(null, "", null, "", null, null, null, null, null, null)
 
@@ -412,14 +312,13 @@ fun Dashboard(
         )
     }
     //end::Device Form assets
-
+    composeProgressStatus.value = false
     Scaffold(floatingActionButton = {
         FloatingActionButton(
             onClick = {
                 scope.launch {
                     composeProgressStatus.value = true
                     delay(300)
-                    localtionViewModel.startLocation()
                     deviceFormScaffoldState.bottomSheetState.expand()
                     if (deviceFormScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded) {
                         composeProgressStatus.value = false
@@ -443,26 +342,48 @@ fun Dashboard(
                 properties = mapProperties, // add properties
             ) { Marker(state = mapMarkerState) }
             HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
-
+            Button(
+                onClick = {
+                    scope.launch {
+                        navController.navigate(Screen.DeviceDashboard.route)
+                    }
+                },
+                content = { Text("Deneme") }
+            )
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black)
             ) {
-                itemsIndexed(dbDeviceList!!.toList()) { _, dd ->
+                itemsIndexed(userviewModel.devicelist) { _, dd ->
                     var deviceDismissShow by remember { mutableStateOf(true) }
                     val deviceDismissState =
                         rememberDismissState(confirmValueChange = { dismissValue ->
-                            if (dismissValue == DismissedToStart || dismissValue == DismissedToEnd) {
-                                deviceDismissShow = false
-                                navController.navigate(Screen.Dashboard.route)
-                                true
-                            } else false
+                            when (dismissValue) {
+                                DismissedToStart -> {
+                                    userviewModel.DeleteDevice(dd)
+                                    deviceDismissShow = false
+                                    true
+                                }
+
+                                DismissedToEnd -> {
+                                    scope.launch {
+                                        composeProgressStatus.value = true
+                                        delay(300)
+                                        deviceFormScaffoldState.bottomSheetState.expand()
+                                    }
+                                    deviceDismissShow = false
+                                    true
+                                }
+
+                                else -> false
+                            }
+
                         }, positionalThreshold = { 150f })
                     AnimatedVisibility(deviceDismissShow, exit = fadeOut(spring())) {
                         SwipeToDismiss(
                             state = deviceDismissState,
-                            directions = setOf(DismissDirection.EndToStart),
+                            //directions = setOf(DismissDirection.EndToStart),
                             background = {
                                 val direction =
                                     deviceDismissState.dismissDirection ?: return@SwipeToDismiss
@@ -505,12 +426,13 @@ fun Dashboard(
                             },
                             dismissContent = {
                                 Card(
-                                    Modifier.clickable {
-                                        navController.navigate(Screen.Signin.route)
-                                    },
+                                    modifier = Modifier.clickable(onClick = {
+                                        navController.navigate(
+                                            Screen.DeviceDashboard.route
+                                        )
+                                    }),
                                     shape = RoundedCornerShape(0.dp),
-
-                                    ) {
+                                ) {
                                     ListItem(
                                         leadingContent = {
                                             var deviceIcon = R.drawable.t3_icon_32
@@ -620,7 +542,7 @@ fun Dashboard(
                 }
                 Spacer(modifier = Modifier.height(20.dp))
                 Row {
-                    var obsAddEdit = userviewModel.mutablelivedataRMEventResult.observeAsState()
+                    var obsAddEdit = userviewModel.mutablelivedataRMEventResult.collectAsState()
                     Button(
                         onClick = {
                             deviceName = ""
@@ -637,12 +559,11 @@ fun Dashboard(
                             scope.launch {
                                 composeProgressStatus.value = true
                                 keyboardController!!.hide()
-                                localtionViewModel.startLocation()
                                 tDevice.name = deviceName
                                 tDevice.macaddress = deviceMacaddress
                                 tDevice.devicetype = selectedOption.value.id
-                                tDevice.latitude = currentLoc.value.latitude.toString()
-                                tDevice.longitude = currentLoc.value.longitude.toString()
+                                tDevice.latitude = currentLocation.value.latitude.toString()
+                                tDevice.longitude = currentLocation.value.longitude.toString()
                                 tDevice.registerdate = helper.getNOWasString()
 
                                 userviewModel.addUpdateDevice(tDevice)
@@ -656,7 +577,7 @@ fun Dashboard(
                                         onOptionSelected(mutableStateOf(devicelist.first()))
 
                                         scope.launch {
-                                            if (dbDeviceList!!.toMutableList().add(tDevice)) {
+                                            if (userviewModel.devicelist.add(tDevice)) {
                                                 composeProgressStatus.value = false
                                             }
                                             delay(400)
@@ -666,7 +587,7 @@ fun Dashboard(
 
                                     RMEventStatus.Exception -> {
                                         composeProgressStatus.value = false
-                                        var formEventRes=obsAddEdit.value?.formEventResult
+                                        var formEventRes = obsAddEdit.value?.formEventResult
                                         if (formEventRes != null) {
                                             if (formEventRes.error != null) {
                                                 Toast.makeText(
@@ -1206,17 +1127,11 @@ fun LocaationRationaleAlert(onDismiss: () -> Unit, onConfirm: () -> Unit) {
 
 @Composable
 fun DeviceDashboard(
-    navController: NavController =rememberNavController(),
+    navController: NavController,
     composeProgressStatus: MutableState<Boolean>,
     userviewModel: userViewModel = hiltViewModel()
 ) {
-
-    try {
-        composeProgressStatus.value = false
-    }
-    catch (ex:Exception){
-        Log.v("MainExep","${ex.message}")
-    }
+    composeProgressStatus.value = false
     Text("Dashboard")
 }
 

@@ -76,7 +76,6 @@ dependencies {
     implementation("com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.11")
     implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.11")
     implementation("org.osmdroid:osmdroid-android:6.1.17")
-    implementation("tech.utsmankece:osm-androd-compose:0.0.3")
     implementation("com.google.accompanist:accompanist-permissions:0.33.2-alpha")
     implementation("com.google.android.gms:play-services-location:21.0.1")
     implementation("com.google.android.gms:play-services-maps:18.1.0")
@@ -84,6 +83,7 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.1.0-alpha02")
     implementation("androidx.compose.runtime:runtime:1.6.0-alpha06")
     implementation("androidx.compose.runtime:runtime-livedata:1.6.0-alpha06")
+    implementation("tech.utsmankece:osm-android-compose:0.0.5")
     //implementation("androidx.compose.runtime:runtime-livedata:1.6.0-alpha06")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
@@ -112,7 +112,7 @@ dependencies {
 
     /*start:: jetpack navigation*/
     val nav_version = "2.7.3"
-    implementation("androidx.navigation:navigation-compose:$nav_version")
+    implementation("androidx.navigation:navigation-compose:2.6.0")
 }
 // Allow references to generated code
 kapt {
