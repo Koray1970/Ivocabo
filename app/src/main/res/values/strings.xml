@@ -28,4 +28,10 @@
     <string name="DR013">User not found!</string>
     <string name="DR010">DeviceAddUpdate general exception</string>
     <!--End::Add Device Remote Event Error Messages-->
+    <!--Start::Device Dashboard-->
+    <string name="tracking">Tracking %s</string>
+    <string name="trackingnotification">Tracking\nNotification</string>
+    <string name="findmydevice">Find %s</string>
+    <string name="missing">Missing</string>
+    <!--End::Device Dashboard-->
 </resources>

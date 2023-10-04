@@ -1,12 +1,8 @@
 package com.serko.ivocabo
 
-import android.Manifest.permission.ACCESS_COARSE_LOCATION
-import android.Manifest.permission.ACCESS_FINE_LOCATION
 import android.annotation.SuppressLint
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.util.Log
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -28,6 +24,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,21 +37,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardColors
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DismissDirection
 import androidx.compose.material3.DismissValue.*
+import androidx.compose.material3.ElevatedButton
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FloatingActionButton
@@ -63,17 +63,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismiss
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberDismissState
@@ -83,7 +83,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -91,11 +90,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
@@ -105,23 +106,18 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
 import com.serko.ivocabo.api.IApiService
@@ -144,13 +140,8 @@ import com.utsman.osmandcompose.ZoomButtonVisibility
 import com.utsman.osmandcompose.rememberCameraState
 import com.utsman.osmandcompose.rememberMarkerState
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.cancellable
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -292,7 +283,7 @@ fun Dashboard(
     val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
     userviewModel.getDbDeviceList()
 
-//start:Map Properties
+    //start:Map Properties
     val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
     var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
     val cameraState = rememberCameraState {
@@ -360,6 +351,7 @@ fun Dashboard(
     composeProgressStatus.value = false
     Scaffold(floatingActionButton = {
         FloatingActionButton(
+            shape = CircleShape,
             onClick = {
                 scope.launch {
                     composeProgressStatus.value = true
@@ -387,12 +379,6 @@ fun Dashboard(
                 properties = mapProperties, // add properties
             ) { Marker(state = mapMarkerState) }
             HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
-            Button(
-                onClick = {
-                    locationViewModel.stopLocationUpdate()
-                },
-                content = { Text("Deneme") }
-            )
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1172,67 +1158,252 @@ fun DeviceDashboard(
     macaddress: String?,
     navController: NavController,
     composeProgressStatus: MutableState<Boolean>,
-    userviewModel: userViewModel = hiltViewModel()
+    userviewModel: userViewModel = hiltViewModel(),
+    //locationViewModel: LocationViewModel = hiltViewModel()
 ) {
     composeProgressStatus.value = true
+    val context = LocalContext.current.applicationContext
+    val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
-    var deviceDetail=userviewModel.getDeviceDetail(macaddress = macaddress!!)
+    var deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
 
+    var chkNotificationCheckState by remember { mutableStateOf(false) }
+    var chkMissingCheckState by remember { mutableStateOf(false) }
+    //start:Map Properties
+    val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
+    var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
+    val cameraState = rememberCameraState {
+        geoPoint = GeoPoint(0.0, 0.0)
+        zoom = 19.0 // optional, default is 5.0
+    }
 
+    val geopoint =
+        GeoPoint(deviceDetail?.latitude!!.toDouble(), deviceDetail?.longitude!!.toDouble())
+    cameraState.geoPoint = geopoint
+    mapMarkerState.geoPoint = geopoint
+
+    mapProperties = mapProperties
+        .copy(isTilesScaledToDpi = true)
+        .copy(tileSources = TileSourceFactory.MAPNIK)
+        .copy(isEnableRotationGesture = false)
+        .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+
+    //end:Map Properties
     Scaffold(
-        topBar = {
-            MediumTopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
-                ),
-                title = {
-                    Row( verticalAlignment = Alignment.CenterVertically){
-                        Text("${deviceDetail?.name}",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                        )
-                        Text("  (${deviceDetail?.macaddress})",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                        )
-                    }
+        floatingActionButton = {
+            FloatingActionButton(
+                containerColor = Color.Green,
+                shape = CircleShape,
+                onClick = {
+                    navController.navigate(Screen.Dashboard.route)
                 },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        navController.navigate(Screen.Dashboard.route)
-                    }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Localized description"
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { /* do something */ }) {
-                        Icon(
-                            imageVector = Icons.Filled.Menu,
-                            contentDescription = "Localized description"
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior
+                content = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.baseline_arrow_back_24),
+                        contentDescription = ""
+                    )
+                }
             )
-        }
-
+        }, floatingActionButtonPosition = FabPosition.Start
     ) {
-        Column(Modifier.padding(it)) {
+        Column(modifier = Modifier.padding(it)) {
+            OpenStreetMap(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(380.dp),
+                cameraState = cameraState,
+                properties = mapProperties, // add properties
+            ) { Marker(state = mapMarkerState) }
+            HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(colorResource(id = R.color.devicedashboardbackground))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(20.dp)
+                ) {
+                    Text(
+                        text = "${deviceDetail?.name}",
+                        style = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                    Text(
+                        text = "${deviceDetail?.macaddress} ${deviceDetail?.registerdate}",
+                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Light),
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                    ) {
+                        ElevatedButton(
+                            modifier = Modifier
+                                .weight(1f)
+                                .alpha(.7f)
+                                .fillMaxHeight(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonColors(
+                                containerColor = Color.Black,
+                                disabledContainerColor = Color.LightGray,
+                                contentColor = Color.White,
+                                disabledContentColor = Color.DarkGray
+                            ),
+                            onClick = { /*TODO*/ }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.baseline_track_changes_24),
+                                tint = Color.Red,
+                                modifier = Modifier.size(48.dp),
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            val txttrack = "${
+                                String.format(
+                                    context.getString(R.string.tracking),
+                                    "\n${deviceDetail?.name}"
+                                )
+                            }"
+                            Text(text = txttrack, color = Color.White)
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        ElevatedButton(
+                            modifier = Modifier
+                                .weight(1f)
+                                .alpha(.7f)
+                                .fillMaxHeight(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonColors(
+                                containerColor = Color.Black,
+                                disabledContainerColor = Color.LightGray,
+                                contentColor = Color.White,
+                                disabledContentColor = Color.DarkGray
+                            ),
+                            onClick = { /*TODO*/ }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.baseline_wifi_find_24),
+                                tint = Color.Red,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .alpha(.7f),
+                                contentDescription = null
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            val txtfindmydevice = "${
+                                String.format(
+                                    context.getString(R.string.findmydevice),
+                                    "\n${deviceDetail?.name}"
+                                )
+                            }"
+                            Text(text = txtfindmydevice, color = Color.White)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                    ) {
+                        ElevatedCard(
+                            modifier = Modifier
+                                .weight(1f)
+                                .alpha(.7f)
+                                .fillMaxHeight(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardColors(
+                                containerColor = Color.Black,
+                                disabledContainerColor = Color.LightGray,
+                                contentColor = Color.White,
+                                disabledContentColor = Color.DarkGray
+                            ),
+                        ) {
+                            Column(
+                                modifier=Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            )
+                            {
+                                Switch(
+                                    checked = chkNotificationCheckState,
+                                    onCheckedChange = {
+                                        chkNotificationCheckState = it
+                                    },
+                                    thumbContent = if (chkNotificationCheckState) {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Filled.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SwitchDefaults.IconSize),
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = context.getString(R.string.trackingnotification),
+                                    color = Color.White,
+                                    style = TextStyle(textAlign = TextAlign.Center)
+                                )
+                            }
+                        }
 
-            Text("Name : ${deviceDetail?.name}")
-            Text("macaddress: ${deviceDetail?.macaddress}")
-            Text("Latitude: ${deviceDetail?.latitude}")
-            composeProgressStatus.value = false
+                        Spacer(modifier = Modifier.width(10.dp))
+                        ElevatedCard(
+                            modifier = Modifier
+                                .weight(1f)
+                                .alpha(.7f)
+                                .fillMaxHeight(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardColors(
+                                containerColor = Color.Black,
+                                disabledContainerColor = Color.LightGray,
+                                contentColor = Color.White,
+                                disabledContentColor = Color.DarkGray
+                            ),
+                        ) {
+                            Column(
+                                modifier=Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            )
+                            {
+                                Switch(
+                                    checked = chkMissingCheckState,
+                                    onCheckedChange = {
+                                        chkMissingCheckState = it
+                                    },
+                                    thumbContent = if (chkMissingCheckState) {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Filled.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(SwitchDefaults.IconSize),
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    }
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = context.getString(R.string.missing),
+                                    color = Color.White,
+                                    style = TextStyle(textAlign = TextAlign.Center)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
     }
-
+    composeProgressStatus.value = false
 }
 
 /*@Preview(showBackground = true)
