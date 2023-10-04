@@ -43,6 +43,10 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BottomSheetScaffold
@@ -59,6 +63,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -68,13 +73,17 @@ import androidx.compose.material3.SwipeToDismiss
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberDismissState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -96,16 +105,21 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.android.gms.maps.model.LatLng
@@ -116,6 +130,7 @@ import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
 import com.serko.ivocabo.data.User
 import com.serko.ivocabo.data.userViewModel
+import com.serko.ivocabo.location.LOCATIONSTATUS
 import com.serko.ivocabo.location.LocationViewModel
 import com.serko.ivocabo.remote.membership.EventResult
 import com.serko.ivocabo.remote.membership.SignInRequest
@@ -129,8 +144,13 @@ import com.utsman.osmandcompose.ZoomButtonVisibility
 import com.utsman.osmandcompose.rememberCameraState
 import com.utsman.osmandcompose.rememberMarkerState
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.cancellable
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -188,8 +208,14 @@ class MainActivity : ComponentActivity() {
                                 composeProgressDialogStatus
                             )
                         }
-                        composable(Screen.DeviceDashboard.route) {
+                        composable(
+                            Screen.DeviceDashboard.route,
+                            arguments = listOf(navArgument("macaddress") {
+                                type = NavType.StringType
+                            })
+                        ) {
                             DeviceDashboard(
+                                macaddress = it.arguments?.getString("macaddress"),
                                 navController,
                                 composeProgressDialogStatus
                             )
@@ -222,7 +248,7 @@ class MainActivity : ComponentActivity() {
 }
 
 val helper = Helper()
-var currentLocation = mutableStateOf(LatLng(0.0, 0.0))
+private lateinit var currentLocation: LatLng
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -261,33 +287,52 @@ fun Dashboard(
 ) {
 
     val context = LocalContext.current.applicationContext
-
-    var currentLocationState = locationViewModel.latlang.collectAsState()
-    currentLocation = remember { mutableStateOf(currentLocationState.value) }
-
     val scope = rememberCoroutineScope()
 
-    userviewModel.getDbDeviceList()
     val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
+    userviewModel.getDbDeviceList()
 
-    //start:Map Properties
+//start:Map Properties
+    val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
+    var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
     val cameraState = rememberCameraState {
         geoPoint = GeoPoint(0.0, 0.0)
         zoom = 19.0 // optional, default is 5.0
     }
-    val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
-    LaunchedEffect(Unit) {
-        val geopoint = GeoPoint(currentLocation.value.latitude, currentLocation.value.longitude)
-        cameraState.geoPoint = geopoint
-        mapMarkerState.geoPoint = geopoint
 
+    scope.launch {
+        locationViewModel.latlang.cancellable().collect {
+            Log.v(
+                "Location Detail",
+                "Status: ${it?.statestatus}"
+            )
+            when (it?.statestatus) {
+                LOCATIONSTATUS.Running -> {
+                    currentLocation = it!!.latlng
+
+                    val geopoint = GeoPoint(currentLocation.latitude, currentLocation.longitude)
+                    cameraState.geoPoint = geopoint
+                    mapMarkerState.geoPoint = geopoint
+
+                    mapProperties = mapProperties
+                        .copy(isTilesScaledToDpi = true)
+                        .copy(tileSources = TileSourceFactory.MAPNIK)
+                        .copy(isEnableRotationGesture = false)
+                        .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+
+
+                    Log.v(
+                        "Location Detail",
+                        "Location: ${currentLocation.latitude},${currentLocation.longitude} "
+                    )
+                }
+
+                LOCATIONSTATUS.Has_Exception -> Log.v("Location Detail", "has exception")
+                else -> Log.v("Location Detail", "NOTHING")
+            }
+        }
     }
-    var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
-    mapProperties = mapProperties
-        .copy(isTilesScaledToDpi = true)
-        .copy(tileSources = TileSourceFactory.MAPNIK)
-        .copy(isEnableRotationGesture = false)
-        .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+
     //end:Map Properties
 
     //start::Device Form assets
@@ -344,9 +389,7 @@ fun Dashboard(
             HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
             Button(
                 onClick = {
-                    scope.launch {
-                        navController.navigate(Screen.DeviceDashboard.route)
-                    }
+                    locationViewModel.stopLocationUpdate()
                 },
                 content = { Text("Deneme") }
             )
@@ -383,7 +426,7 @@ fun Dashboard(
                     AnimatedVisibility(deviceDismissShow, exit = fadeOut(spring())) {
                         SwipeToDismiss(
                             state = deviceDismissState,
-                            //directions = setOf(DismissDirection.EndToStart),
+                            directions = setOf(DismissDirection.EndToStart),
                             background = {
                                 val direction =
                                     deviceDismissState.dismissDirection ?: return@SwipeToDismiss
@@ -427,9 +470,7 @@ fun Dashboard(
                             dismissContent = {
                                 Card(
                                     modifier = Modifier.clickable(onClick = {
-                                        navController.navigate(
-                                            Screen.DeviceDashboard.route
-                                        )
+                                        navController.navigate("devicedashboard/${dd.macaddress}")
                                     }),
                                     shape = RoundedCornerShape(0.dp),
                                 ) {
@@ -562,8 +603,8 @@ fun Dashboard(
                                 tDevice.name = deviceName
                                 tDevice.macaddress = deviceMacaddress
                                 tDevice.devicetype = selectedOption.value.id
-                                tDevice.latitude = currentLocation.value.latitude.toString()
-                                tDevice.longitude = currentLocation.value.longitude.toString()
+                                tDevice.latitude = currentLocation.latitude.toString()
+                                tDevice.longitude = currentLocation.longitude.toString()
                                 tDevice.registerdate = helper.getNOWasString()
 
                                 userviewModel.addUpdateDevice(tDevice)
@@ -1125,14 +1166,73 @@ fun LocaationRationaleAlert(onDismiss: () -> Unit, onConfirm: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeviceDashboard(
+    macaddress: String?,
     navController: NavController,
     composeProgressStatus: MutableState<Boolean>,
     userviewModel: userViewModel = hiltViewModel()
 ) {
-    composeProgressStatus.value = false
-    Text("Dashboard")
+    composeProgressStatus.value = true
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
+    var deviceDetail=userviewModel.getDeviceDetail(macaddress = macaddress!!)
+
+
+    Scaffold(
+        topBar = {
+            MediumTopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
+                ),
+                title = {
+                    Row( verticalAlignment = Alignment.CenterVertically){
+                        Text("${deviceDetail?.name}",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                        )
+                        Text("  (${deviceDetail?.macaddress})",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        navController.navigate(Screen.Dashboard.route)
+                    }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Localized description"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { /* do something */ }) {
+                        Icon(
+                            imageVector = Icons.Filled.Menu,
+                            contentDescription = "Localized description"
+                        )
+                    }
+                },
+                scrollBehavior = scrollBehavior
+            )
+        }
+
+    ) {
+        Column(Modifier.padding(it)) {
+
+            Text("Name : ${deviceDetail?.name}")
+            Text("macaddress: ${deviceDetail?.macaddress}")
+            Text("Latitude: ${deviceDetail?.latitude}")
+            composeProgressStatus.value = false
+        }
+
+    }
+
 }
 
 /*@Preview(showBackground = true)

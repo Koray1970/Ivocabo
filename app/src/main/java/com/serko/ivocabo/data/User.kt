@@ -194,6 +194,26 @@ class userViewModel @Inject constructor(
 
         }
     }
+    fun getDeviceDetail(macaddress:String):Device?{
+        try{
+            val dDevicecol = repo.getDevices()
+            if (dDevicecol != null) {
+                if (dDevicecol.length > 0) {
+                    var listOfDevice = gson.fromJson<List<Device>>(
+                        dDevicecol,
+                        object : TypeToken<List<Device>>() {}.type
+                    )
+                    if(listOfDevice.any{ a->a.macaddress==macaddress }){
+                        return  listOfDevice.first { a->a.macaddress==macaddress }
+                    }
+                }
+            }
+        }
+        catch (e:Exception){
+
+        }
+        return null
+    }
 
     fun addUpdateDevice(device: Device) {
         viewModelScope.launch {
