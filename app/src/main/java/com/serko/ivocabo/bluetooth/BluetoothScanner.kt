@@ -1,5 +1,6 @@
 package com.serko.ivocabo.bluetooth
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
@@ -10,9 +11,13 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
+import androidx.annotation.RequiresPermission
 import androidx.compose.runtime.mutableStateOf
+import androidx.core.app.ActivityCompat
 import androidx.core.content.contentValuesOf
 import androidx.lifecycle.MutableLiveData
 import com.serko.ivocabo.bluetooth.BluetoothScannerState.*
@@ -25,8 +30,9 @@ import javax.inject.Inject
 
 enum class BluetoothScannerState { INITIATE, START_SCAN, STOP_SCAN }
 
-@SuppressLint("MissingPermission")
+
 class BluetoothScanner @Inject constructor(@ApplicationContext private val context: Context) {
+    private val TAG = BluetoothScanner::class.java.simpleName
     var evenState = MutableLiveData<BluetoothScannerState>(INITIATE)
     var listOfMacaddress = mutableListOf<String>()
     private val bluetoothManager: BluetoothManager =
@@ -36,30 +42,32 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
     private lateinit var scanSetting: ScanSettings
     private lateinit var scanList: MutableList<ScanFilter>
 
-    /*init {
-        when (evenState.value) {
-            START_SCAN -> {
-                if (listOfMacaddress != null)
-                    if (listOfMacaddress?.size!! > 0)
-                        StartScan()
-            }
+    private val bluetoothpermission=if(Build.VERSION.SDK_INT>30)
+        android.Manifest.permission.BLUETOOTH_SCAN
+    else
+        android.Manifest.permission.BLUETOOTH_ADMIN
 
-            STOP_SCAN -> StopScan()
-            else -> InitScan()
-        }
-    }*/
 
     fun InitScan() {
         bluetoothAdapter = bluetoothManager.adapter
         if (bluetoothAdapter?.isEnabled == false) {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            if (ActivityCompat.checkSelfPermission(
+                    context,
+                    bluetoothpermission
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Toast.makeText(context, "Enable bluetooth device!", Toast.LENGTH_LONG).show()
+                return
+            }
             context.startActivity(enableBtIntent)
         } else {
             bluetoothLeScanner = bluetoothAdapter?.bluetoothLeScanner
 
             scanSetting = ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-                .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                .setMatchMode(ScanSettings.MATCH_MODE_STICKY)
+                //.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
                 .build()
             scanList = mutableListOf<ScanFilter>()
             listOfMacaddress?.forEach {
@@ -73,8 +81,37 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
         }
     }
 
+    val scanCallback: ScanCallback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult?) {
+            super.onScanResult(callbackType, result)
+            Log.v(TAG, "RSSI : ${result?.rssi}")
+
+        }
+
+        override fun onBatchScanResults(results: MutableList<ScanResult>?) {
+            results?.forEach {
+                Log.v(TAG, "Batch RSSI : ${it.rssi}")
+            }
+            super.onBatchScanResults(results)
+        }
+
+        override fun onScanFailed(errorCode: Int) {
+            Log.v(TAG, "ERROR CODE : $errorCode")
+            super.onScanFailed(errorCode)
+        }
+    }
+
+
     fun StartScan() {
         try {
+            if (ActivityCompat.checkSelfPermission(
+                    context,
+                    bluetoothpermission
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Toast.makeText(context, "Bluetooth scan permission is denied!", Toast.LENGTH_LONG).show()
+                return
+            }
             MainScope().launch {
                 delay(1000)
                 bluetoothLeScanner?.startScan(scanList, scanSetting, scanCallback)
@@ -86,27 +123,18 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
 
     fun StopScan() {
         try {
+            if (ActivityCompat.checkSelfPermission(
+                    context,
+                    bluetoothpermission
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                Toast.makeText(context, "Bluetooth scan permission is denied!", Toast.LENGTH_LONG).show()
+                return
+            }
+            InitScan()
             bluetoothLeScanner?.stopScan(scanCallback)
         } catch (e: Exception) {
             Toast.makeText(context, "Error:${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    val scanCallback: ScanCallback = object : ScanCallback() {
-        override fun onScanResult(callbackType: Int, result: ScanResult?) {
-            Log.v("BLESCANRESULT", "RSSI : ${result?.rssi}")
-            super.onScanResult(callbackType, result)
-        }
-
-        override fun onBatchScanResults(results: MutableList<ScanResult>?) {
-            results?.forEach {
-                Log.v("BLESCANRESULT", "Batch RSSI : ${it.rssi}")
-            }
-            super.onBatchScanResults(results)
-        }
-        override fun onScanFailed(errorCode: Int) {
-            Log.v("BLESCANRESULT", "ERROR CODE : $errorCode")
-            super.onScanFailed(errorCode)
         }
     }
 

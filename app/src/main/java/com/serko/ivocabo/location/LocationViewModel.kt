@@ -54,7 +54,7 @@ class LocationRepository @Inject constructor(@ApplicationContext private val con
             try {
                 locationProvider = LocationServices.getFusedLocationProviderClient(context)
                 val locationRequest =
-                    LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000).build()
+                    LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 10000).build()
 
                 locationCallback = object : LocationCallback() {
                     override fun onLocationResult(p0: LocationResult) {

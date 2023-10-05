@@ -1,6 +1,7 @@
 package com.serko.ivocabo
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -9,9 +10,8 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -33,8 +33,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectable
@@ -46,9 +44,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BottomSheetScaffold
-import androidx.compose.material3.BottomSheetScaffoldState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.Card
@@ -69,23 +65,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SheetState
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismiss
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberDismissState
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -111,10 +102,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.toUpperCase
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -125,6 +114,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.MultiplePermissionsState
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.accompanist.permissions.shouldShowRationale
@@ -132,7 +122,6 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
 import com.serko.ivocabo.api.IApiService
 import com.serko.ivocabo.bluetooth.BluetoothScanner
-import com.serko.ivocabo.bluetooth.BluetoothScannerState
 import com.serko.ivocabo.data.Device
 import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
@@ -152,7 +141,6 @@ import com.utsman.osmandcompose.ZoomButtonVisibility
 import com.utsman.osmandcompose.rememberCameraState
 import com.utsman.osmandcompose.rememberMarkerState
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.cancellable
 import kotlinx.coroutines.launch
@@ -305,7 +293,7 @@ val formTitle =
     TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
 
 @SuppressLint("CoroutineCreationDuringComposition")
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun Dashboard(
     navController: NavController = rememberNavController(),
@@ -315,368 +303,376 @@ fun Dashboard(
 ) {
 
     val context = LocalContext.current.applicationContext
-    val scope = rememberCoroutineScope()
+    var locationPermissionStatus:Pair<Boolean,MultiplePermissionsState> = LocationPermission(context)
+    if (!locationPermissionStatus.first) {
+        LaunchedEffect(Unit) {
+            delay(300)
+            locationPermissionStatus.second.launchMultiplePermissionRequest()
+        }
+    } else {
+        val scope = rememberCoroutineScope()
 
-    val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
-    userviewModel.getDbDeviceList()
+        val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
+        userviewModel.getDbDeviceList()
 
-    //start:Map Properties
-    val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
-    var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
-    val cameraState = rememberCameraState {
-        geoPoint = GeoPoint(0.0, 0.0)
-        zoom = 19.0 // optional, default is 5.0
-    }
+        //start:Map Properties
+        val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
+        var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
+        val cameraState = rememberCameraState {
+            geoPoint = GeoPoint(0.0, 0.0)
+            zoom = 19.0 // optional, default is 5.0
+        }
 
-    scope.launch {
-        locationViewModel.latlang.cancellable().collect {
-            Log.v(
-                "Location Detail",
-                "Status: ${it?.statestatus}"
+        scope.launch {
+            locationViewModel.latlang.cancellable().collect {
+                Log.v(
+                    "Location Detail",
+                    "Status: ${it?.statestatus}"
+                )
+                when (it?.statestatus) {
+                    LOCATIONSTATUS.Running -> {
+                        currentLocation = it!!.latlng
+
+                        val geopoint = GeoPoint(currentLocation.latitude, currentLocation.longitude)
+                        cameraState.geoPoint = geopoint
+                        mapMarkerState.geoPoint = geopoint
+
+                        mapProperties = mapProperties
+                            .copy(isTilesScaledToDpi = true)
+                            .copy(tileSources = TileSourceFactory.MAPNIK)
+                            .copy(isEnableRotationGesture = false)
+                            .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+
+
+                        Log.v(
+                            "Location Detail",
+                            "Location: ${currentLocation.latitude},${currentLocation.longitude} "
+                        )
+                    }
+
+                    LOCATIONSTATUS.Has_Exception -> Log.v("Location Detail", "has exception")
+                    else -> Log.v("Location Detail", "NOTHING")
+                }
+            }
+        }
+
+        //end:Map Properties
+
+        //start::Device Form assets
+        val tDevice = Device(null, "", null, "", null, null, null, null, null, null)
+
+        val focusManager = LocalFocusManager.current
+        val keyboardController = LocalSoftwareKeyboardController.current
+
+        var deviceName by rememberSaveable { mutableStateOf(tDevice.name) }
+        var deviceMacaddress by rememberSaveable { mutableStateOf(tDevice.macaddress) }
+
+        val deviceFormHelper = DeviceFormHelper()
+        val devicelist = deviceFormHelper.FormDeviceList(context)
+        var nselecteddevice = devicelist.first()
+        if (tDevice.devicetype != null)
+            nselecteddevice = devicelist.first { it.id == tDevice.devicetype!! }
+        var (selectedOption, onOptionSelected) = remember {
+            mutableStateOf(
+                mutableStateOf(
+                    nselecteddevice
+                )
             )
-            when (it?.statestatus) {
-                LOCATIONSTATUS.Running -> {
-                    currentLocation = it!!.latlng
-
-                    val geopoint = GeoPoint(currentLocation.latitude, currentLocation.longitude)
-                    cameraState.geoPoint = geopoint
-                    mapMarkerState.geoPoint = geopoint
-
-                    mapProperties = mapProperties
-                        .copy(isTilesScaledToDpi = true)
-                        .copy(tileSources = TileSourceFactory.MAPNIK)
-                        .copy(isEnableRotationGesture = false)
-                        .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
-
-
-                    Log.v(
-                        "Location Detail",
-                        "Location: ${currentLocation.latitude},${currentLocation.longitude} "
+        }
+        //end::Device Form assets
+        composeProgressStatus.value = false
+        Scaffold(floatingActionButton = {
+            FloatingActionButton(
+                shape = CircleShape,
+                onClick = {
+                    scope.launch {
+                        composeProgressStatus.value = true
+                        delay(300)
+                        deviceFormScaffoldState.bottomSheetState.expand()
+                        if (deviceFormScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded) {
+                            composeProgressStatus.value = false
+                        }
+                    }
+                },
+                content = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.baseline_add_24),
+                        contentDescription = ""
                     )
                 }
-
-                LOCATIONSTATUS.Has_Exception -> Log.v("Location Detail", "has exception")
-                else -> Log.v("Location Detail", "NOTHING")
-            }
-        }
-    }
-
-    //end:Map Properties
-
-    //start::Device Form assets
-    val tDevice = Device(null, "", null, "", null, null, null, null, null, null)
-
-    val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    var deviceName by rememberSaveable { mutableStateOf(tDevice.name) }
-    var deviceMacaddress by rememberSaveable { mutableStateOf(tDevice.macaddress) }
-
-    val deviceFormHelper = DeviceFormHelper()
-    val devicelist = deviceFormHelper.FormDeviceList(context)
-    var nselecteddevice = devicelist.first()
-    if (tDevice.devicetype != null)
-        nselecteddevice = devicelist.first { it.id == tDevice.devicetype!! }
-    var (selectedOption, onOptionSelected) = remember {
-        mutableStateOf(
-            mutableStateOf(
-                nselecteddevice
             )
-        )
-    }
-    //end::Device Form assets
-    composeProgressStatus.value = false
-    Scaffold(floatingActionButton = {
-        FloatingActionButton(
-            shape = CircleShape,
-            onClick = {
-                scope.launch {
-                    composeProgressStatus.value = true
-                    delay(300)
-                    deviceFormScaffoldState.bottomSheetState.expand()
-                    if (deviceFormScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded) {
-                        composeProgressStatus.value = false
-                    }
-                }
-            },
-            content = {
-                Icon(
-                    painter = painterResource(id = R.drawable.baseline_add_24),
-                    contentDescription = ""
-                )
-            }
-        )
-    }, floatingActionButtonPosition = FabPosition.End) {
-        Column(modifier = Modifier.padding(it)) {
-            OpenStreetMap(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(380.dp),
-                cameraState = cameraState,
-                properties = mapProperties, // add properties
-            ) { Marker(state = mapMarkerState) }
-            HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-            ) {
-                itemsIndexed(userviewModel.devicelist) { _, dd ->
-                    var deviceDismissShow by remember { mutableStateOf(true) }
-                    val deviceDismissState =
-                        rememberDismissState(confirmValueChange = { dismissValue ->
-                            when (dismissValue) {
-                                DismissedToStart -> {
-                                    userviewModel.DeleteDevice(dd)
-                                    deviceDismissShow = false
-                                    true
-                                }
-
-                                DismissedToEnd -> {
-                                    scope.launch {
-                                        composeProgressStatus.value = true
-                                        delay(300)
-                                        deviceFormScaffoldState.bottomSheetState.expand()
+        }, floatingActionButtonPosition = FabPosition.End) {
+            Column(modifier = Modifier.padding(it)) {
+                OpenStreetMap(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(380.dp),
+                    cameraState = cameraState,
+                    properties = mapProperties, // add properties
+                ) { Marker(state = mapMarkerState) }
+                HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black)
+                ) {
+                    itemsIndexed(userviewModel.devicelist) { _, dd ->
+                        var deviceDismissShow by remember { mutableStateOf(true) }
+                        val deviceDismissState =
+                            rememberDismissState(confirmValueChange = { dismissValue ->
+                                when (dismissValue) {
+                                    DismissedToStart -> {
+                                        userviewModel.DeleteDevice(dd)
+                                        deviceDismissShow = false
+                                        true
                                     }
-                                    deviceDismissShow = false
-                                    true
-                                }
 
-                                else -> false
-                            }
-
-                        }, positionalThreshold = { 150f })
-                    AnimatedVisibility(deviceDismissShow, exit = fadeOut(spring())) {
-                        SwipeToDismiss(
-                            state = deviceDismissState,
-                            directions = setOf(DismissDirection.EndToStart),
-                            background = {
-                                val direction =
-                                    deviceDismissState.dismissDirection ?: return@SwipeToDismiss
-                                val color by animateColorAsState(
-                                    when (deviceDismissState.targetValue) {
-                                        Default -> Color.LightGray
-                                        DismissedToEnd -> Color.Green
-                                        else -> Color.Red
-                                    },
-                                    label = ""
-                                )
-                                val eventIcon = when (direction) {
-                                    DismissDirection.StartToEnd -> R.drawable.baseline_edit_24
-                                    DismissDirection.EndToStart -> R.drawable.baseline_delete_24
-                                }
-                                val boxIconScale by animateFloatAsState(
-                                    targetValue =
-                                    if (deviceDismissState.targetValue == Default)
-                                        .8f else 1.2f, label = ""
-                                )
-                                val boxAlignment =
-                                    when (direction) {
-                                        DismissDirection.StartToEnd -> Alignment.CenterStart
-                                        DismissDirection.EndToStart -> Alignment.CenterEnd
-                                    }
-                                Box(
-                                    Modifier
-                                        .fillMaxSize()
-                                        .background(color),
-                                    contentAlignment = boxAlignment
-                                ) {
-                                    Icon(
-                                        painter = painterResource(id = eventIcon),
-                                        contentDescription = "",
-                                        modifier = Modifier
-                                            .scale(boxIconScale)
-                                            .padding(start = 24.dp, end = 24.dp)
-                                    )
-                                }
-                            },
-                            dismissContent = {
-                                Card(
-                                    modifier = Modifier.clickable(onClick = {
-                                        navController.navigate("devicedashboard/${dd.macaddress}")
-                                    }),
-                                    shape = RoundedCornerShape(0.dp),
-                                ) {
-                                    ListItem(
-                                        leadingContent = {
-                                            var deviceIcon = R.drawable.t3_icon_32
-                                            if (dd.devicetype == 2)
-                                                deviceIcon = R.drawable.e9_icon_32
-                                            Icon(
-                                                painter = painterResource(id = deviceIcon),
-                                                contentDescription = null,
-                                                tint = Color.DarkGray
-                                            )
-                                        },
-                                        headlineContent = {
-                                            Text(
-                                                text = dd.name.uppercase(Locale.ROOT),
-                                                style = TextStyle(
-                                                    color = Color.DarkGray,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    fontSize = 16.sp
-                                                )
-                                            )
-                                        },
-                                        supportingContent = {
-                                            Text(
-                                                text = dd.macaddress.uppercase(Locale.ROOT),
-                                                style = TextStyle(
-                                                    color = Color.Gray,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                )
-                                            )
+                                    DismissedToEnd -> {
+                                        scope.launch {
+                                            composeProgressStatus.value = true
+                                            delay(300)
+                                            deviceFormScaffoldState.bottomSheetState.expand()
                                         }
-                                    )
-                                    HorizontalDivider()
+                                        deviceDismissShow = false
+                                        true
+                                    }
+
+                                    else -> false
                                 }
-                            })
-                    }
-                }
-            }
-        }
-    }
-    //start::Device Form
 
-
-    BottomSheetScaffold(
-        scaffoldState = deviceFormScaffoldState,
-        sheetPeekHeight = 0.dp,
-        sheetContent = {
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(10.dp)
-            ) {
-                Text(
-                    text = context.getString(R.string.deviceformTitle),
-                    style = formTitle,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(modifier = Modifier.height(20.dp))
-                HorizontalDivider(thickness = 1.dp)
-                Spacer(modifier = Modifier.height(20.dp))
-                TextField(
-                    value = deviceMacaddress,
-                    onValueChange = { deviceMacaddress = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(context.getString(R.string.macaddress)) },
-                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
-                )
-                Spacer(modifier = Modifier.height(20.dp))
-                TextField(
-                    value = deviceName,
-                    onValueChange = { deviceName = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(context.getString(R.string.name)) },
-                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
-                )
-                Spacer(modifier = Modifier.height(20.dp))
-                Column(Modifier.selectableGroup()) {
-                    devicelist.forEach {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .selectable(
-                                    selected = (it.id == selectedOption.value.id),
-                                    onClick = { onOptionSelected(mutableStateOf(it)) },
-                                    role = Role.RadioButton
-                                )
-                                .padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = (it.id == selectedOption.value.id),
-                                onClick = null // null recommended for accessibility with screenreaders
-                            )
-                            Text(
-                                text = context.getString(it.name),
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(start = 16.dp)
-                            )
-                            Icon(
-                                painter = painterResource(id = it.image),
-                                modifier = Modifier.padding(start = 16.dp),
-                                contentDescription = "${context.getString(it.name)}"
-                            )
+                            }, positionalThreshold = { 150f })
+                        AnimatedVisibility(deviceDismissShow, exit = fadeOut(spring())) {
+                            SwipeToDismiss(
+                                state = deviceDismissState,
+                                directions = setOf(DismissDirection.EndToStart),
+                                background = {
+                                    val direction =
+                                        deviceDismissState.dismissDirection ?: return@SwipeToDismiss
+                                    val color by animateColorAsState(
+                                        when (deviceDismissState.targetValue) {
+                                            Default -> Color.LightGray
+                                            DismissedToEnd -> Color.Green
+                                            else -> Color.Red
+                                        },
+                                        label = ""
+                                    )
+                                    val eventIcon = when (direction) {
+                                        DismissDirection.StartToEnd -> R.drawable.baseline_edit_24
+                                        DismissDirection.EndToStart -> R.drawable.baseline_delete_24
+                                    }
+                                    val boxIconScale by animateFloatAsState(
+                                        targetValue =
+                                        if (deviceDismissState.targetValue == Default)
+                                            .8f else 1.2f, label = ""
+                                    )
+                                    val boxAlignment =
+                                        when (direction) {
+                                            DismissDirection.StartToEnd -> Alignment.CenterStart
+                                            DismissDirection.EndToStart -> Alignment.CenterEnd
+                                        }
+                                    Box(
+                                        Modifier
+                                            .fillMaxSize()
+                                            .background(color),
+                                        contentAlignment = boxAlignment
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(id = eventIcon),
+                                            contentDescription = "",
+                                            modifier = Modifier
+                                                .scale(boxIconScale)
+                                                .padding(start = 24.dp, end = 24.dp)
+                                        )
+                                    }
+                                },
+                                dismissContent = {
+                                    Card(
+                                        modifier = Modifier.clickable(onClick = {
+                                            navController.navigate("devicedashboard/${dd.macaddress}")
+                                        }),
+                                        shape = RoundedCornerShape(0.dp),
+                                    ) {
+                                        ListItem(
+                                            leadingContent = {
+                                                var deviceIcon = R.drawable.t3_icon_32
+                                                if (dd.devicetype == 2)
+                                                    deviceIcon = R.drawable.e9_icon_32
+                                                Icon(
+                                                    painter = painterResource(id = deviceIcon),
+                                                    contentDescription = null,
+                                                    tint = Color.DarkGray
+                                                )
+                                            },
+                                            headlineContent = {
+                                                Text(
+                                                    text = dd.name.uppercase(Locale.ROOT),
+                                                    style = TextStyle(
+                                                        color = Color.DarkGray,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        fontSize = 16.sp
+                                                    )
+                                                )
+                                            },
+                                            supportingContent = {
+                                                Text(
+                                                    text = dd.macaddress.uppercase(Locale.ROOT),
+                                                    style = TextStyle(
+                                                        color = Color.Gray,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                    )
+                                                )
+                                            }
+                                        )
+                                        HorizontalDivider()
+                                    }
+                                })
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(20.dp))
-                Row {
-                    var obsAddEdit = userviewModel.mutablelivedataRMEventResult.collectAsState()
-                    Button(
-                        onClick = {
-                            deviceName = ""
-                            deviceMacaddress = ""
-                            keyboardController!!.hide()
-                            scope.launch {
-                                deviceFormScaffoldState.bottomSheetState.partialExpand()
-                            }
-                        },
-                        content = { Text(context.getString(R.string.cancel)) }
-                    )
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                composeProgressStatus.value = true
-                                keyboardController!!.hide()
-                                tDevice.name = deviceName
-                                tDevice.macaddress = deviceMacaddress
-                                tDevice.devicetype = selectedOption.value.id
-                                tDevice.latitude = currentLocation.latitude.toString()
-                                tDevice.longitude = currentLocation.longitude.toString()
-                                tDevice.registerdate = helper.getNOWasString()
-
-                                userviewModel.addUpdateDevice(tDevice)
-
-                                when (obsAddEdit.value?.stateStatus) {
-                                    RMEventStatus.Complete -> {
-                                        deviceName = ""
-                                        deviceMacaddress = ""
-
-                                        selectedOption = mutableStateOf(devicelist.first())
-                                        onOptionSelected(mutableStateOf(devicelist.first()))
-
-                                        scope.launch {
-                                            if (userviewModel.devicelist.add(tDevice)) {
-                                                composeProgressStatus.value = false
-                                            }
-                                            delay(400)
-                                            deviceFormScaffoldState.bottomSheetState.partialExpand()
-                                        }
-                                    }
-
-                                    RMEventStatus.Exception -> {
-                                        composeProgressStatus.value = false
-                                        var formEventRes = obsAddEdit.value?.formEventResult
-                                        if (formEventRes != null) {
-                                            if (formEventRes.error != null) {
-                                                Toast.makeText(
-                                                    context,
-                                                    formEventRes.error!!.exception,
-                                                    Toast.LENGTH_LONG
-                                                ).show()
-                                            }
-                                        }
-                                    }
-
-                                    else -> {
-                                        composeProgressStatus.value = true
-                                    }
-                                }
-                            }
-                        },
-                        content = { Text(context.getString(R.string.save)) }
-                    )
-                }
-
             }
         }
-    ) {}
-    //end:Device Form
+        //start::Device Form
+
+
+        BottomSheetScaffold(
+            scaffoldState = deviceFormScaffoldState,
+            sheetPeekHeight = 0.dp,
+            sheetContent = {
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(10.dp)
+                ) {
+                    Text(
+                        text = context.getString(R.string.deviceformTitle),
+                        style = formTitle,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    HorizontalDivider(thickness = 1.dp)
+                    Spacer(modifier = Modifier.height(20.dp))
+                    TextField(
+                        value = deviceMacaddress,
+                        onValueChange = { deviceMacaddress = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(context.getString(R.string.macaddress)) },
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    TextField(
+                        value = deviceName,
+                        onValueChange = { deviceName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(context.getString(R.string.name)) },
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Column(Modifier.selectableGroup()) {
+                        devicelist.forEach {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .selectable(
+                                        selected = (it.id == selectedOption.value.id),
+                                        onClick = { onOptionSelected(mutableStateOf(it)) },
+                                        role = Role.RadioButton
+                                    )
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = (it.id == selectedOption.value.id),
+                                    onClick = null // null recommended for accessibility with screenreaders
+                                )
+                                Text(
+                                    text = context.getString(it.name),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.padding(start = 16.dp)
+                                )
+                                Icon(
+                                    painter = painterResource(id = it.image),
+                                    modifier = Modifier.padding(start = 16.dp),
+                                    contentDescription = "${context.getString(it.name)}"
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Row {
+                        var obsAddEdit = userviewModel.mutablelivedataRMEventResult.collectAsState()
+                        Button(
+                            onClick = {
+                                deviceName = ""
+                                deviceMacaddress = ""
+                                keyboardController!!.hide()
+                                scope.launch {
+                                    deviceFormScaffoldState.bottomSheetState.partialExpand()
+                                }
+                            },
+                            content = { Text(context.getString(R.string.cancel)) }
+                        )
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    composeProgressStatus.value = true
+                                    keyboardController!!.hide()
+                                    tDevice.name = deviceName
+                                    tDevice.macaddress = deviceMacaddress
+                                    tDevice.devicetype = selectedOption.value.id
+                                    tDevice.latitude = currentLocation.latitude.toString()
+                                    tDevice.longitude = currentLocation.longitude.toString()
+                                    tDevice.registerdate = helper.getNOWasString()
+
+                                    userviewModel.addUpdateDevice(tDevice)
+
+                                    when (obsAddEdit.value?.stateStatus) {
+                                        RMEventStatus.Complete -> {
+                                            deviceName = ""
+                                            deviceMacaddress = ""
+
+                                            selectedOption = mutableStateOf(devicelist.first())
+                                            onOptionSelected(mutableStateOf(devicelist.first()))
+
+                                            scope.launch {
+                                                if (userviewModel.devicelist.add(tDevice)) {
+                                                    composeProgressStatus.value = false
+                                                }
+                                                delay(400)
+                                                deviceFormScaffoldState.bottomSheetState.partialExpand()
+                                            }
+                                        }
+
+                                        RMEventStatus.Exception -> {
+                                            composeProgressStatus.value = false
+                                            var formEventRes = obsAddEdit.value?.formEventResult
+                                            if (formEventRes != null) {
+                                                if (formEventRes.error != null) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        formEventRes.error!!.exception,
+                                                        Toast.LENGTH_LONG
+                                                    ).show()
+                                                }
+                                            }
+                                        }
+
+                                        else -> {
+                                            composeProgressStatus.value = true
+                                        }
+                                    }
+                                }
+                            },
+                            content = { Text(context.getString(R.string.save)) }
+                        )
+                    }
+
+                }
+            }
+        ) {}
+        //end:Device Form
+    }
 }
 
 
@@ -685,6 +681,7 @@ fun ForgetPassword(navController: NavController) {
 
 }
 
+@OptIn(ExperimentalPermissionsApi::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun SignIn(
@@ -692,198 +689,215 @@ fun SignIn(
     composeProgressStatus: MutableState<Boolean>,
     userviewModel: userViewModel = hiltViewModel(),
 ) {
-    val gson = Gson()
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) {
-        val countofUser = userviewModel.getCountofUser()
-        if (countofUser > 0) {
-            val user = userviewModel.fetchUser()
-            if (!user.token.isNullOrEmpty())
-                navController.navigate(Screen.Dashboard.route)
-        }
-    }
-
     val context = LocalContext.current.applicationContext
-    val formHelper = SignUpFormHelper()
+    var locationPermissionStatus:Pair<Boolean,MultiplePermissionsState> = LocationPermission(context)
 
-    var usernameVal by remember { mutableStateOf("") }
-    var usernameError by remember { mutableStateOf(false) }
-    val usernameLimit = 64
-    var passwordVal by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(true) }
-    var passwordError by remember { mutableStateOf(false) }
-    val passwordLimit = 16
-    val required = context.getString(R.string.required)
-    val limit = context.getString(R.string.limit)
-    Surface(modifier = Modifier.padding(horizontal = 20.dp)) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()
-        ) {
-            Image(
-                modifier = Modifier.width(180.dp),
-                alignment = Alignment.Center,
-                painter = painterResource(id = R.drawable.ivocabo_logo_appicon),
-                contentDescription = ""
-            )
-            Text(
-                modifier = Modifier.padding(vertical = 10.dp),
-                text = context.getString(R.string.signinTitle),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold
-            )
-            TextField(value = usernameVal,
-                onValueChange = {
-                    if (usernameVal.length < usernameLimit) usernameVal = it
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 3.dp),
-                placeholder = { Text(text = context.getString(R.string.username)) },
-                label = { Text(text = context.getString(R.string.username)) },
-                singleLine = true,
-                isError = usernameError,
-                supportingText = {
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = required, color = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(text = "$limit ${usernameVal.length}/$usernameLimit")
-                    }
-                },
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Words, keyboardType = KeyboardType.Text
-                ),
-                trailingIcon = {
-                    IconButton(onClick = { usernameVal = "" }) {
-                        Icon(
-                            painter = painterResource(R.drawable.baseline_clear_24),
-                            contentDescription = ""
-                        )
-                    }
-                })
-            TextField(value = passwordVal,
-                onValueChange = {
-                    if (passwordVal.length < passwordLimit) {
-                        passwordVal = it
-                    }
-                },
-                placeholder = { Text(text = context.getString(R.string.password)) },
-                label = { Text(text = context.getString(R.string.password)) },
-                singleLine = true,
-                isError = passwordError,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 3.dp),
-                supportingText = {
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = required, color = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(text = "$limit ${passwordVal.length}/$passwordLimit")
-                    }
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                visualTransformation = if (passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
-                trailingIcon = {
-                    var iconResource = R.drawable.baseline_visibility_off_24
-                    if (passwordVisible) iconResource = R.drawable.baseline_visibility_24
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(
-                            painter = painterResource(iconResource), contentDescription = ""
-                        )
-                    }
-                })
-            Row(
-                modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End
+    if (!locationPermissionStatus.first) {
+        LaunchedEffect(Unit) {
+            delay(300)
+            locationPermissionStatus.second.launchMultiplePermissionRequest()
+        }
+    } else {
+        val gson = Gson()
+        val scope = rememberCoroutineScope()
+        LaunchedEffect(Unit) {
+            val countofUser = userviewModel.getCountofUser()
+            if (countofUser > 0) {
+                val user = userviewModel.fetchUser()
+                if (!user.token.isNullOrEmpty())
+                    navController.navigate(Screen.Dashboard.route)
+            }
+        }
+
+
+        val formHelper = SignUpFormHelper()
+
+        var usernameVal by remember { mutableStateOf("") }
+        var usernameError by remember { mutableStateOf(false) }
+        val usernameLimit = 64
+        var passwordVal by remember { mutableStateOf("") }
+        var passwordVisible by remember { mutableStateOf(true) }
+        var passwordError by remember { mutableStateOf(false) }
+        val passwordLimit = 16
+        val required = context.getString(R.string.required)
+        val limit = context.getString(R.string.limit)
+        Surface(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Button(modifier = Modifier.padding(horizontal = 3.dp), onClick = {
-                    composeProgressStatus.value = true
-                    navController.navigate(Screen.Signup.route)
-                }) {
-                    Text(text = context.getString(R.string.cancel))
-                }
-                Button(onClick = {
-                    usernameError = formHelper.checkUsername(usernameVal)
-                    passwordError = formHelper.checkPassword(passwordVal)
-                    if (!(usernameError && passwordError)) {
-                        try {
-                            if (IApiService.apiService == null)
-                                IApiService.getInstance()
-                            val apiSrv = IApiService.apiService
-                            val call: Call<SignInResponse>? = apiSrv?.srvSignIn(
-                                SignInRequest(
-                                    passwordVal, usernameVal
-                                )
+                Image(
+                    modifier = Modifier.width(180.dp),
+                    alignment = Alignment.Center,
+                    painter = painterResource(id = R.drawable.ivocabo_logo_appicon),
+                    contentDescription = ""
+                )
+                Text(
+                    modifier = Modifier.padding(vertical = 10.dp),
+                    text = context.getString(R.string.signinTitle),
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                TextField(value = usernameVal,
+                    onValueChange = {
+                        if (usernameVal.length < usernameLimit) usernameVal = it
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp),
+                    placeholder = { Text(text = context.getString(R.string.username)) },
+                    label = { Text(text = context.getString(R.string.username)) },
+                    singleLine = true,
+                    isError = usernameError,
+                    supportingText = {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = required, color = MaterialTheme.colorScheme.error
                             )
-                            call!!.enqueue(object : Callback<SignInResponse> {
-                                override fun onResponse(
-                                    call: Call<SignInResponse>,
-                                    response: Response<SignInResponse>,
-                                ) {
-                                    if (response.isSuccessful) {
-                                        val rmResult = response.body()!!
-                                        scope.launch {
-                                            val countOfUser = userviewModel.getCountofUser()
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(text = "$limit ${usernameVal.length}/$usernameLimit")
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        keyboardType = KeyboardType.Text
+                    ),
+                    trailingIcon = {
+                        IconButton(onClick = { usernameVal = "" }) {
+                            Icon(
+                                painter = painterResource(R.drawable.baseline_clear_24),
+                                contentDescription = ""
+                            )
+                        }
+                    })
+                TextField(value = passwordVal,
+                    onValueChange = {
+                        if (passwordVal.length < passwordLimit) {
+                            passwordVal = it
+                        }
+                    },
+                    placeholder = { Text(text = context.getString(R.string.password)) },
+                    label = { Text(text = context.getString(R.string.password)) },
+                    singleLine = true,
+                    isError = passwordError,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp),
+                    supportingText = {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = required, color = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(text = "$limit ${passwordVal.length}/$passwordLimit")
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    visualTransformation = if (passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
+                    trailingIcon = {
+                        var iconResource = R.drawable.baseline_visibility_off_24
+                        if (passwordVisible) iconResource = R.drawable.baseline_visibility_24
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                painter = painterResource(iconResource), contentDescription = ""
+                            )
+                        }
+                    })
+                Row(
+                    modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End
+                ) {
+                    Button(modifier = Modifier.padding(horizontal = 3.dp), onClick = {
+                        composeProgressStatus.value = true
+                        navController.navigate(Screen.Signup.route)
+                    }) {
+                        Text(text = context.getString(R.string.cancel))
+                    }
+                    Button(onClick = {
+                        usernameError = formHelper.checkUsername(usernameVal)
+                        passwordError = formHelper.checkPassword(passwordVal)
+                        if (!(usernameError && passwordError)) {
+                            try {
+                                if (IApiService.apiService == null)
+                                    IApiService.getInstance()
+                                val apiSrv = IApiService.apiService
+                                val call: Call<SignInResponse>? = apiSrv?.srvSignIn(
+                                    SignInRequest(
+                                        passwordVal, usernameVal
+                                    )
+                                )
+                                call!!.enqueue(object : Callback<SignInResponse> {
+                                    override fun onResponse(
+                                        call: Call<SignInResponse>,
+                                        response: Response<SignInResponse>,
+                                    ) {
+                                        if (response.isSuccessful) {
+                                            val rmResult = response.body()!!
+                                            scope.launch {
+                                                val countOfUser = userviewModel.getCountofUser()
 
-                                            if (countOfUser > 0) {
-                                                val user = userviewModel.fetchUser()
-                                                user.token = rmResult.token
-                                                userviewModel.updateUser(user)
-                                            } else {
-                                                val username = rmResult.username!!
-                                                val email = rmResult.email!!
-                                                userviewModel.insertUser(
-                                                    User(
-                                                        0,
-                                                        helper.getNOWasSQLDate(),
-                                                        username,
-                                                        email,
-                                                        rmResult.token,
-                                                        if (rmResult.devicelist != null) {
-                                                            gson.toJson(rmResult.devicelist)
-                                                        } else {
-                                                            null
-                                                        }
+                                                if (countOfUser > 0) {
+                                                    val user = userviewModel.fetchUser()
+                                                    user.token = rmResult.token
+                                                    userviewModel.updateUser(user)
+                                                } else {
+                                                    val username = rmResult.username!!
+                                                    val email = rmResult.email!!
+                                                    userviewModel.insertUser(
+                                                        User(
+                                                            0,
+                                                            helper.getNOWasSQLDate(),
+                                                            username,
+                                                            email,
+                                                            rmResult.token,
+                                                            if (rmResult.devicelist != null) {
+                                                                gson.toJson(rmResult.devicelist)
+                                                            } else {
+                                                                null
+                                                            }
+                                                        )
                                                     )
-                                                )
+                                                }
+                                                composeProgressStatus.value = false
+                                                delay(120)
+                                                navController.navigate(Screen.Dashboard.route)
                                             }
-                                            composeProgressStatus.value = false
-                                            delay(120)
-                                            navController.navigate(Screen.Dashboard.route)
                                         }
                                     }
-                                }
 
-                                override fun onFailure(call: Call<SignInResponse>, t: Throwable) {
-                                    /*result.eventResult.error = Error(
+                                    override fun onFailure(
+                                        call: Call<SignInResponse>,
+                                        t: Throwable
+                                    ) {
+                                        /*result.eventResult.error = Error(
                                         "SRV_SNG10",
                                         t.message.toString(),
                                         "com.serko.ivocabo.api.SrvMembership.invokeSignInService.call!!.enqueue.onFailure"
                                     )*/
-                                }
-                            })
-                        } catch (ex: Exception) {
-                            Toast.makeText(
-                                context,
-                                "Exception : ${ex.localizedMessage}",
-                                Toast.LENGTH_LONG
-                            ).show()
+                                    }
+                                })
+                            } catch (ex: Exception) {
+                                Toast.makeText(
+                                    context,
+                                    "Exception : ${ex.localizedMessage}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                         }
+                    }) {
+                        Text(text = context.getString(R.string.signin))
                     }
-                }) {
-                    Text(text = context.getString(R.string.signin))
                 }
             }
-        }
 
+        }
     }
     LaunchedEffect(Unit) {
         delay(200)
         composeProgressStatus.value = false
     }
 }
+
+
 
 @OptIn(ExperimentalPermissionsApi::class)
 @RequiresApi(Build.VERSION_CODES.O)
@@ -896,79 +910,12 @@ fun Signup(
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
 
-    var permissionStatus by remember { mutableStateOf(false) }
-    var permArry = listOf(
-        android.Manifest.permission.ACCESS_FINE_LOCATION,
-        android.Manifest.permission.BLUETOOTH
-    )
-    var permissionRR = rememberMultiplePermissionsState(permissions = permArry)
-    permissionRR.permissions.forEach { permis ->
-        when (permis.permission) {
-            android.Manifest.permission.ACCESS_FINE_LOCATION -> {
-                when {
-                    permis.status.isGranted -> {
-                        permissionStatus = true
-                    }
+    var locationPermissionStatus:Pair<Boolean,MultiplePermissionsState> = LocationPermission(context)
 
-                    permis.status.shouldShowRationale -> {
-                        Toast.makeText(
-                            context,
-                            "Please granted location permission!",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-
-                    else -> {
-                        Toast.makeText(
-                            context,
-                            "Location permission is denied, go to app settings for enabling",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-            }
-
-            android.Manifest.permission.BLUETOOTH_SCAN -> {
-                when {
-                    permis.status.isGranted -> {
-                        permissionStatus = true
-                    }
-
-                    permis.status.shouldShowRationale -> {
-                        Toast.makeText(
-                            context,
-                            "Please granted bluetooth scan permission!",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-
-                    else -> {
-                        Toast.makeText(
-                            context,
-                            "Bluetooth scan permission is denied, go to app settings for enabling",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-            }
-        }
-    }
-    /* val requestPermissionLauncher =
-         rememberLauncherForActivityResult(
-             contract = ActivityResultContracts.RequestPermission(),
-             onResult = { isGranted: Boolean ->
-                 if (isGranted) {
-                     permissionStatus = true
-                 }
-             })*/
-
-
-    if (!permissionStatus) {
+    if (!locationPermissionStatus.first) {
         LaunchedEffect(Unit) {
             delay(300)
-            permissionRR.launchMultiplePermissionRequest()
-            //requestPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
-            //requestPermissionLauncher.launch(android.Manifest.permission.BLUETOOTH_SCAN)
+            locationPermissionStatus.second.launchMultiplePermissionRequest()
         }
     } else {
         composeProgressStatus.value = true
@@ -1231,7 +1178,7 @@ fun Signup(
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun DeviceDashboard(
     macaddress: String?,
@@ -1242,252 +1189,262 @@ fun DeviceDashboard(
 ) {
     composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
-    val scope = rememberCoroutineScope()
-    var deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
+    var bluetoothPermissionStatus:Pair<Boolean,MultiplePermissionsState> =BluetoothPermission(context)
 
-    var chkNotificationCheckState by remember { mutableStateOf(false) }
-    var chkMissingCheckState by remember { mutableStateOf(false) }
-    //start:Map Properties
-    val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
-    var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
-    val cameraState = rememberCameraState {
-        geoPoint = GeoPoint(0.0, 0.0)
-        zoom = 19.0 // optional, default is 5.0
-    }
+    if (!bluetoothPermissionStatus.first) {
+        LaunchedEffect(Unit) {
+            delay(300)
+            bluetoothPermissionStatus.second.launchMultiplePermissionRequest()
+        }
+    } else {
+        val scope = rememberCoroutineScope()
+        var deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
 
-    val geopoint =
-        GeoPoint(deviceDetail?.latitude!!.toDouble(), deviceDetail?.longitude!!.toDouble())
-    cameraState.geoPoint = geopoint
-    mapMarkerState.geoPoint = geopoint
+        var chkNotificationCheckState by remember { mutableStateOf(false) }
+        var chkMissingCheckState by remember { mutableStateOf(false) }
+        //start:Map Properties
+        val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
+        var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
+        val cameraState = rememberCameraState {
+            geoPoint = GeoPoint(0.0, 0.0)
+            zoom = 19.0 // optional, default is 5.0
+        }
 
-    mapProperties = mapProperties
-        .copy(isTilesScaledToDpi = true)
-        .copy(tileSources = TileSourceFactory.MAPNIK)
-        .copy(isEnableRotationGesture = false)
-        .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+        val geopoint =
+            GeoPoint(deviceDetail?.latitude!!.toDouble(), deviceDetail?.longitude!!.toDouble())
+        cameraState.geoPoint = geopoint
+        mapMarkerState.geoPoint = geopoint
 
-    //end:Map Properties
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(
-                containerColor = Color.Green,
-                shape = CircleShape,
-                onClick = {
-                    navController.navigate(Screen.Dashboard.route)
-                },
-                content = {
-                    Icon(
-                        painter = painterResource(id = R.drawable.baseline_arrow_back_24),
-                        contentDescription = ""
-                    )
-                }
-            )
-        }, floatingActionButtonPosition = FabPosition.Start
-    ) {
-        Column(modifier = Modifier.padding(it)) {
-            OpenStreetMap(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(380.dp),
-                cameraState = cameraState,
-                properties = mapProperties, // add properties
-            ) { Marker(state = mapMarkerState) }
-            HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(colorResource(id = R.color.devicedashboardbackground))
-            ) {
-                Column(
+        mapProperties = mapProperties
+            .copy(isTilesScaledToDpi = true)
+            .copy(tileSources = TileSourceFactory.MAPNIK)
+            .copy(isEnableRotationGesture = false)
+            .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+
+        //end:Map Properties
+        Scaffold(
+            floatingActionButton = {
+                FloatingActionButton(
+                    containerColor = Color.Green,
+                    shape = CircleShape,
+                    onClick = {
+                        navController.navigate(Screen.Dashboard.route)
+                    },
+                    content = {
+                        Icon(
+                            painter = painterResource(id = R.drawable.baseline_arrow_back_24),
+                            contentDescription = ""
+                        )
+                    }
+                )
+            }, floatingActionButtonPosition = FabPosition.Start
+        ) {
+            Column(modifier = Modifier.padding(it)) {
+                OpenStreetMap(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(380.dp),
+                    cameraState = cameraState,
+                    properties = mapProperties, // add properties
+                ) { Marker(state = mapMarkerState) }
+                HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(20.dp)
+                        .background(colorResource(id = R.color.devicedashboardbackground))
                 ) {
-                    Text(
-                        text = "${deviceDetail?.name}",
-                        style = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold),
-                        color = Color.White
-                    )
-                    Text(
-                        text = "${deviceDetail?.macaddress} ${deviceDetail?.registerdate}",
-                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Light),
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Row(
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp)
+                            .fillMaxSize()
+                            .padding(20.dp)
                     ) {
-                        ElevatedButton(
+                        Text(
+                            text = "${deviceDetail?.name}",
+                            style = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold),
+                            color = Color.White
+                        )
+                        Text(
+                            text = "${deviceDetail?.macaddress} ${deviceDetail?.registerdate}",
+                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Light),
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .alpha(.7f)
-                                .fillMaxHeight(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonColors(
-                                containerColor = Color.Black,
-                                disabledContainerColor = Color.LightGray,
-                                contentColor = Color.White,
-                                disabledContentColor = Color.DarkGray
-                            ),
-                            onClick = {
-                                navController.navigate("trackmydevice/${deviceDetail.macaddress}")
-                            }) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.baseline_track_changes_24),
-                                tint = Color.Red,
-                                modifier = Modifier.size(48.dp),
-                                contentDescription = null
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            val txttrack = "${
-                                String.format(
-                                    context.getString(R.string.tracking),
-                                    "\n${deviceDetail?.name}"
-                                )
-                            }"
-                            Text(text = txttrack, color = Color.White)
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        ElevatedButton(
-                            modifier = Modifier
-                                .weight(1f)
-                                .alpha(.7f)
-                                .fillMaxHeight(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonColors(
-                                containerColor = Color.Black,
-                                disabledContainerColor = Color.LightGray,
-                                contentColor = Color.White,
-                                disabledContentColor = Color.DarkGray
-                            ),
-                            onClick = {
-                                navController.navigate("findmydevice/${deviceDetail.macaddress}")
-                            }) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.baseline_wifi_find_24),
-                                tint = Color.Red,
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .alpha(.7f),
-                                contentDescription = null
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            val txtfindmydevice = "${
-                                String.format(
-                                    context.getString(R.string.findmydevice),
-                                    "\n${deviceDetail?.name}"
-                                )
-                            }"
-                            Text(text = txtfindmydevice, color = Color.White)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp)
-                    ) {
-                        ElevatedCard(
-                            modifier = Modifier
-                                .weight(1f)
-                                .alpha(.7f)
-                                .fillMaxHeight(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = CardColors(
-                                containerColor = Color.Black,
-                                disabledContainerColor = Color.LightGray,
-                                contentColor = Color.White,
-                                disabledContentColor = Color.DarkGray
-                            ),
+                                .fillMaxWidth()
+                                .height(120.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.Center,
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            )
-                            {
-                                Switch(
-                                    checked = chkNotificationCheckState,
-                                    onCheckedChange = {
-                                        chkNotificationCheckState = it
-                                    },
-                                    thumbContent = if (chkNotificationCheckState) {
-                                        {
-                                            Icon(
-                                                imageVector = Icons.Filled.Check,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(SwitchDefaults.IconSize),
-                                            )
-                                        }
-                                    } else {
-                                        null
-                                    }
+                            ElevatedButton(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .alpha(.7f)
+                                    .fillMaxHeight(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonColors(
+                                    containerColor = Color.Black,
+                                    disabledContainerColor = Color.LightGray,
+                                    contentColor = Color.White,
+                                    disabledContentColor = Color.DarkGray
+                                ),
+                                onClick = {
+                                    navController.navigate("trackmydevice/${deviceDetail.macaddress}")
+                                }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.baseline_track_changes_24),
+                                    tint = Color.Red,
+                                    modifier = Modifier.size(48.dp),
+                                    contentDescription = null
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = context.getString(R.string.trackingnotification),
-                                    color = Color.White,
-                                    style = TextStyle(textAlign = TextAlign.Center)
+                                val txttrack = "${
+                                    String.format(
+                                        context.getString(R.string.tracking),
+                                        "\n${deviceDetail?.name}"
+                                    )
+                                }"
+                                Text(text = txttrack, color = Color.White)
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            ElevatedButton(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .alpha(.7f)
+                                    .fillMaxHeight(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonColors(
+                                    containerColor = Color.Black,
+                                    disabledContainerColor = Color.LightGray,
+                                    contentColor = Color.White,
+                                    disabledContentColor = Color.DarkGray
+                                ),
+                                onClick = {
+                                    navController.navigate("findmydevice/${deviceDetail.macaddress}")
+                                }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.baseline_wifi_find_24),
+                                    tint = Color.Red,
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .alpha(.7f),
+                                    contentDescription = null
                                 )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                val txtfindmydevice = "${
+                                    String.format(
+                                        context.getString(R.string.findmydevice),
+                                        "\n${deviceDetail?.name}"
+                                    )
+                                }"
+                                Text(text = txtfindmydevice, color = Color.White)
                             }
                         }
-
-                        Spacer(modifier = Modifier.width(10.dp))
-                        ElevatedCard(
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .alpha(.7f)
-                                .fillMaxHeight(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = CardColors(
-                                containerColor = Color.Black,
-                                disabledContainerColor = Color.LightGray,
-                                contentColor = Color.White,
-                                disabledContentColor = Color.DarkGray
-                            ),
+                                .fillMaxWidth()
+                                .height(120.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement = Arrangement.Center,
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            )
-                            {
-                                Switch(
-                                    checked = chkMissingCheckState,
-                                    onCheckedChange = {
-                                        chkMissingCheckState = it
-                                    },
-                                    thumbContent = if (chkMissingCheckState) {
-                                        {
-                                            Icon(
-                                                imageVector = Icons.Filled.Check,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(SwitchDefaults.IconSize),
-                                            )
+                            ElevatedCard(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .alpha(.7f)
+                                    .fillMaxHeight(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardColors(
+                                    containerColor = Color.Black,
+                                    disabledContainerColor = Color.LightGray,
+                                    contentColor = Color.White,
+                                    disabledContentColor = Color.DarkGray
+                                ),
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                )
+                                {
+                                    Switch(
+                                        checked = chkNotificationCheckState,
+                                        onCheckedChange = {
+                                            chkNotificationCheckState = it
+                                        },
+                                        thumbContent = if (chkNotificationCheckState) {
+                                            {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(SwitchDefaults.IconSize),
+                                                )
+                                            }
+                                        } else {
+                                            null
                                         }
-                                    } else {
-                                        null
-                                    }
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = context.getString(R.string.trackingnotification),
+                                        color = Color.White,
+                                        style = TextStyle(textAlign = TextAlign.Center)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(10.dp))
+                            ElevatedCard(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .alpha(.7f)
+                                    .fillMaxHeight(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardColors(
+                                    containerColor = Color.Black,
+                                    disabledContainerColor = Color.LightGray,
+                                    contentColor = Color.White,
+                                    disabledContentColor = Color.DarkGray
+                                ),
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = context.getString(R.string.missing),
-                                    color = Color.White,
-                                    style = TextStyle(textAlign = TextAlign.Center)
-                                )
+                                {
+                                    Switch(
+                                        checked = chkMissingCheckState,
+                                        onCheckedChange = {
+                                            chkMissingCheckState = it
+                                        },
+                                        thumbContent = if (chkMissingCheckState) {
+                                            {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(SwitchDefaults.IconSize),
+                                                )
+                                            }
+                                        } else {
+                                            null
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = context.getString(R.string.missing),
+                                        color = Color.White,
+                                        style = TextStyle(textAlign = TextAlign.Center)
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
+        }
     }
     composeProgressStatus.value = false
 }
 
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun FindMyDevice(
     macaddress: String?,
@@ -1497,23 +1454,37 @@ fun FindMyDevice(
 ) {
     //composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
-    val bluetoothScanner = BluetoothScanner(context)
 
-    val scope = rememberCoroutineScope()
-    var deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
+    var bluetoothPermissionStatus:Pair<Boolean,MultiplePermissionsState> =BluetoothPermission(context)
+
+    if (!bluetoothPermissionStatus.first) {
+        LaunchedEffect(Unit) {
+            delay(300)
+            bluetoothPermissionStatus.second.launchMultiplePermissionRequest()
+        }
+    } else {
+        val bluetoothScanner = BluetoothScanner(context)
+
+        val scope = rememberCoroutineScope()
+        var deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
 
 
-    LaunchedEffect(Unit){
-        bluetoothScanner.listOfMacaddress.add(deviceDetail!!.macaddress.uppercase(Locale.ROOT))
-        delay(300)
-        bluetoothScanner.InitScan()
-        delay(320)
-        bluetoothScanner.StartScan()
+        LaunchedEffect(Unit) {
+            bluetoothScanner.listOfMacaddress.add(deviceDetail!!.macaddress.uppercase(Locale.ROOT))
+            delay(300)
+            bluetoothScanner.InitScan()
+            delay(320)
+            bluetoothScanner.StartScan()
+        }
+
+        Column {
+            Text(text = "${deviceDetail?.name}")
+        }
+        BackHandler(true) {
+            bluetoothScanner.StopScan()
+        }
     }
 
-    Column {
-        Text(text = "${deviceDetail?.name}")
-    }
 }
 
 @Composable
