@@ -5,6 +5,8 @@ import com.google.gson.annotations.SerializedName
 
 @Keep
 data class Device(
+    @SerializedName("date")
+    val date:String?,
     @SerializedName("description")
     val description: String?,
     @SerializedName("ismissing")

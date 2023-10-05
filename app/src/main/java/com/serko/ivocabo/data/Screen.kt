@@ -8,4 +8,6 @@ sealed class Screen(val route:String){
     object Dashboard:Screen("dashboard")
     object DeviceForm:Screen("deviceform")
     object DeviceDashboard:Screen("devicedashboard/{macaddress}")
+    object FindMyDevice:Screen("findmydevice/{macaddress}")
+    object TrackMyDevice:Screen("trackmydevice/{macaddress}")
 }

@@ -9,7 +9,9 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -46,6 +48,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.BottomSheetScaffoldState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.Card
@@ -66,6 +69,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetState
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismiss
@@ -81,6 +85,7 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -106,6 +111,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.toUpperCase
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -118,9 +124,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.google.accompanist.permissions.shouldShowRationale
 import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
 import com.serko.ivocabo.api.IApiService
+import com.serko.ivocabo.bluetooth.BluetoothScanner
+import com.serko.ivocabo.bluetooth.BluetoothScannerState
 import com.serko.ivocabo.data.Device
 import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
@@ -140,6 +152,7 @@ import com.utsman.osmandcompose.ZoomButtonVisibility
 import com.utsman.osmandcompose.rememberCameraState
 import com.utsman.osmandcompose.rememberMarkerState
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.cancellable
 import kotlinx.coroutines.launch
@@ -211,6 +224,30 @@ class MainActivity : ComponentActivity() {
                                 composeProgressDialogStatus
                             )
                         }
+                        composable(
+                            Screen.FindMyDevice.route,
+                            arguments = listOf(navArgument("macaddress") {
+                                type = NavType.StringType
+                            })
+                        ) {
+                            FindMyDevice(
+                                macaddress = it.arguments?.getString("macaddress"),
+                                navController,
+                                composeProgressDialogStatus
+                            )
+                        }
+                        composable(
+                            Screen.TrackMyDevice.route,
+                            arguments = listOf(navArgument("macaddress") {
+                                type = NavType.StringType
+                            })
+                        ) {
+                            TrackMyDevice(
+                                macaddress = it.arguments?.getString("macaddress"),
+                                navController,
+                                composeProgressDialogStatus
+                            )
+                        }
                     }
                     ComposeProgress(composeProgressDialogStatus)
                 }
@@ -274,7 +311,7 @@ fun Dashboard(
     navController: NavController = rememberNavController(),
     composeProgressStatus: MutableState<Boolean>,
     userviewModel: userViewModel = hiltViewModel(),
-    locationViewModel: LocationViewModel = hiltViewModel()
+    locationViewModel: LocationViewModel = hiltViewModel(),
 ) {
 
     val context = LocalContext.current.applicationContext
@@ -848,6 +885,7 @@ fun SignIn(
     }
 }
 
+@OptIn(ExperimentalPermissionsApi::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun Signup(
@@ -855,302 +893,343 @@ fun Signup(
     composeProgressStatus: MutableState<Boolean>,
     userviewModel: userViewModel = hiltViewModel(),
 ) {
-    composeProgressStatus.value = true
-    val countOfUser = userviewModel.getCountofUser()
+    val context = LocalContext.current.applicationContext
+    val scope = rememberCoroutineScope()
 
-    if (countOfUser > 0) {
-        val user = userviewModel.fetchUser()
-
-        composeProgressStatus.value = false
-        if (!user.token.isNullOrEmpty())
-            navController.navigate(Screen.Dashboard.route)
-        else
-            navController.navigate(Screen.Signin.route)
-
-    } else {
-
-        val context = LocalContext.current.applicationContext
-        val scope = rememberCoroutineScope()
-
-        val formHelper = SignUpFormHelper()
-        val security = Security()
-
-
-        var usernameVal by remember { mutableStateOf("") }
-        var usernameError by remember { mutableStateOf(false) }
-        val usernameLimit = 64
-
-        var emailVal by remember { mutableStateOf("") }
-        var emailError by remember { mutableStateOf(false) }
-        val emailLimit = 320
-        var passwordVal by remember { mutableStateOf("") }
-        var passwordVisible by remember { mutableStateOf(true) }
-        var passwordError by remember { mutableStateOf(false) }
-        val passwordLimit = 16
-        val required = context.getString(R.string.required)
-        val limit = context.getString(R.string.limit)
-        composeProgressStatus.value = false
-        //remote result open dialog
-        var remoteResultOpenDialog by remember { mutableStateOf(false) }
-
-        if (remoteResultOpenDialog) {
-            AlertDialog(
-                onDismissRequest = { remoteResultOpenDialog = false },
-                confirmButton = {
-                    remoteResultOpenDialog = false
-                    navController.navigate(Screen.Signin.route)
-                },
-                title = { Text(text = context.getString(R.string.rgResultDialogTitle)) },
-                text = { Text(text = context.getString(R.string.rgResultDialogContent)) }
-            )
-        }
-        Surface(modifier = Modifier.padding(horizontal = 20.dp)) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Image(
-                    modifier = Modifier.width(180.dp),
-                    alignment = Alignment.Center,
-                    painter = painterResource(id = R.drawable.ivocabo_logo_appicon),
-                    contentDescription = ""
-                )
-                Text(
-                    modifier = Modifier.padding(vertical = 10.dp),
-                    text = context.getString(R.string.signupTitle),
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                TextField(value = usernameVal,
-                    onValueChange = {
-                        if (usernameVal.length < usernameLimit) usernameVal = it
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 3.dp),
-                    placeholder = { Text(text = context.getString(R.string.username)) },
-                    label = { Text(text = context.getString(R.string.username)) },
-                    singleLine = true,
-                    isError = usernameError,
-                    supportingText = {
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = required, color = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.weight(1f))
-                            Text(text = "$limit ${usernameVal.length}/$usernameLimit")
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Words,
-                        keyboardType = KeyboardType.Text
-                    ),
-                    trailingIcon = {
-                        IconButton(onClick = { usernameVal = "" }) {
-                            Icon(
-                                painter = painterResource(R.drawable.baseline_clear_24),
-                                contentDescription = ""
-                            )
-                        }
-                    })
-                TextField(value = emailVal,
-                    onValueChange = {
-                        if (emailVal.length < emailLimit) emailVal = it
-                    },
-                    placeholder = { Text(text = context.getString(R.string.email)) },
-                    label = { Text(text = context.getString(R.string.email)) },
-                    singleLine = true,
-                    isError = emailError,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 3.dp),
-                    supportingText = {
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = required, color = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.weight(1f))
-                            Text(text = "$limit ${emailVal.length}/$emailLimit")
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.None,
-                        keyboardType = KeyboardType.Email
-                    ),
-                    trailingIcon = {
-                        IconButton(onClick = { emailVal = "" }) {
-                            Icon(
-                                painter = painterResource(R.drawable.baseline_clear_24),
-                                contentDescription = ""
-                            )
-                        }
-                    })
-                TextField(value = passwordVal,
-                    onValueChange = {
-                        if (passwordVal.length < passwordLimit) {
-                            passwordVal = it
-                        }
-                    },
-                    placeholder = { Text(text = context.getString(R.string.password)) },
-                    label = { Text(text = context.getString(R.string.password)) },
-                    singleLine = true,
-                    isError = passwordError,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 3.dp),
-                    supportingText = {
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = required, color = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.weight(1f))
-                            Text(text = "$limit ${passwordVal.length}/$passwordLimit")
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    visualTransformation = if (passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
-                    trailingIcon = {
-                        var iconResource = R.drawable.baseline_visibility_off_24
-                        if (passwordVisible) iconResource = R.drawable.baseline_visibility_24
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(
-                                painter = painterResource(iconResource), contentDescription = ""
-                            )
-                        }
-                    })
-                Row(
-                    modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End
-                ) {
-                    Button(modifier = Modifier.padding(horizontal = 3.dp), onClick = {
-                        composeProgressStatus.value = true
-                        navController.navigate(Screen.Signin.route)
-                    }) {
-                        Text(text = context.getString(R.string.signin))
+    var permissionStatus by remember { mutableStateOf(false) }
+    var permArry = listOf(
+        android.Manifest.permission.ACCESS_FINE_LOCATION,
+        android.Manifest.permission.BLUETOOTH
+    )
+    var permissionRR = rememberMultiplePermissionsState(permissions = permArry)
+    permissionRR.permissions.forEach { permis ->
+        when (permis.permission) {
+            android.Manifest.permission.ACCESS_FINE_LOCATION -> {
+                when {
+                    permis.status.isGranted -> {
+                        permissionStatus = true
                     }
-                    Button(onClick = {
-                        composeProgressStatus.value = true
-                        usernameError = formHelper.checkUsername(usernameVal)
-                        emailError = formHelper.checkEmail(emailVal)
-                        passwordError = formHelper.checkPassword(passwordVal)
-                        if (!(usernameError && emailError && passwordError)) {
-                            try {
-                                //add to remote server
 
-                                IApiService.getInstance()
-                                val apiSrv = IApiService.apiService
-                                val call: Call<EventResult> = apiSrv!!.srvSignUp(
-                                    SignUpRequest(
-                                        emailVal,
-                                        passwordVal,
-                                        usernameVal
-                                    )
+                    permis.status.shouldShowRationale -> {
+                        Toast.makeText(
+                            context,
+                            "Please granted location permission!",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+
+                    else -> {
+                        Toast.makeText(
+                            context,
+                            "Location permission is denied, go to app settings for enabling",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+
+            android.Manifest.permission.BLUETOOTH_SCAN -> {
+                when {
+                    permis.status.isGranted -> {
+                        permissionStatus = true
+                    }
+
+                    permis.status.shouldShowRationale -> {
+                        Toast.makeText(
+                            context,
+                            "Please granted bluetooth scan permission!",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+
+                    else -> {
+                        Toast.makeText(
+                            context,
+                            "Bluetooth scan permission is denied, go to app settings for enabling",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+        }
+    }
+    /* val requestPermissionLauncher =
+         rememberLauncherForActivityResult(
+             contract = ActivityResultContracts.RequestPermission(),
+             onResult = { isGranted: Boolean ->
+                 if (isGranted) {
+                     permissionStatus = true
+                 }
+             })*/
+
+
+    if (!permissionStatus) {
+        LaunchedEffect(Unit) {
+            delay(300)
+            permissionRR.launchMultiplePermissionRequest()
+            //requestPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            //requestPermissionLauncher.launch(android.Manifest.permission.BLUETOOTH_SCAN)
+        }
+    } else {
+        composeProgressStatus.value = true
+        val countOfUser = userviewModel.getCountofUser()
+        if (countOfUser > 0) {
+            val user = userviewModel.fetchUser()
+            composeProgressStatus.value = false
+            if (!user.token.isNullOrEmpty())
+                navController.navigate(Screen.Dashboard.route)
+            else
+                navController.navigate(Screen.Signin.route)
+
+        } else {
+            val formHelper = SignUpFormHelper()
+            val security = Security()
+
+
+            var usernameVal by remember { mutableStateOf("") }
+            var usernameError by remember { mutableStateOf(false) }
+            val usernameLimit = 64
+
+            var emailVal by remember { mutableStateOf("") }
+            var emailError by remember { mutableStateOf(false) }
+            val emailLimit = 320
+            var passwordVal by remember { mutableStateOf("") }
+            var passwordVisible by remember { mutableStateOf(true) }
+            var passwordError by remember { mutableStateOf(false) }
+            val passwordLimit = 16
+            val required = context.getString(R.string.required)
+            val limit = context.getString(R.string.limit)
+            composeProgressStatus.value = false
+            //remote result open dialog
+            var remoteResultOpenDialog by remember { mutableStateOf(false) }
+
+            if (remoteResultOpenDialog) {
+                AlertDialog(
+                    onDismissRequest = { remoteResultOpenDialog = false },
+                    confirmButton = {
+                        remoteResultOpenDialog = false
+                        navController.navigate(Screen.Signin.route)
+                    },
+                    title = { Text(text = context.getString(R.string.rgResultDialogTitle)) },
+                    text = { Text(text = context.getString(R.string.rgResultDialogContent)) }
+                )
+            }
+            Surface(modifier = Modifier.padding(horizontal = 20.dp)) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Image(
+                        modifier = Modifier.width(180.dp),
+                        alignment = Alignment.Center,
+                        painter = painterResource(id = R.drawable.ivocabo_logo_appicon),
+                        contentDescription = ""
+                    )
+                    Text(
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        text = context.getString(R.string.signupTitle),
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextField(value = usernameVal,
+                        onValueChange = {
+                            if (usernameVal.length < usernameLimit) usernameVal = it
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        placeholder = { Text(text = context.getString(R.string.username)) },
+                        label = { Text(text = context.getString(R.string.username)) },
+                        singleLine = true,
+                        isError = usernameError,
+                        supportingText = {
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = required, color = MaterialTheme.colorScheme.error
                                 )
-                                call.enqueue(object : Callback<EventResult> {
-                                    override fun onResponse(
-                                        call: Call<EventResult>,
-                                        response: Response<EventResult>,
-                                    ) {
-                                        if (response.isSuccessful) {
-                                            if (response.body()!!.eventresultflag == 0) {
-                                                //now u can add form items to database
-                                                val enUserVal = security.encrypt(usernameVal)
-                                                val enEmailVal = security.encrypt(emailVal)
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(text = "$limit ${usernameVal.length}/$usernameLimit")
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Words,
+                            keyboardType = KeyboardType.Text
+                        ),
+                        trailingIcon = {
+                            IconButton(onClick = { usernameVal = "" }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.baseline_clear_24),
+                                    contentDescription = ""
+                                )
+                            }
+                        })
+                    TextField(value = emailVal,
+                        onValueChange = {
+                            if (emailVal.length < emailLimit) emailVal = it
+                        },
+                        placeholder = { Text(text = context.getString(R.string.email)) },
+                        label = { Text(text = context.getString(R.string.email)) },
+                        singleLine = true,
+                        isError = emailError,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        supportingText = {
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = required, color = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(text = "$limit ${emailVal.length}/$emailLimit")
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.None,
+                            keyboardType = KeyboardType.Email
+                        ),
+                        trailingIcon = {
+                            IconButton(onClick = { emailVal = "" }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.baseline_clear_24),
+                                    contentDescription = ""
+                                )
+                            }
+                        })
+                    TextField(value = passwordVal,
+                        onValueChange = {
+                            if (passwordVal.length < passwordLimit) {
+                                passwordVal = it
+                            }
+                        },
+                        placeholder = { Text(text = context.getString(R.string.password)) },
+                        label = { Text(text = context.getString(R.string.password)) },
+                        singleLine = true,
+                        isError = passwordError,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        supportingText = {
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    text = required, color = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text(text = "$limit ${passwordVal.length}/$passwordLimit")
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        visualTransformation = if (passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
+                        trailingIcon = {
+                            var iconResource = R.drawable.baseline_visibility_off_24
+                            if (passwordVisible) iconResource = R.drawable.baseline_visibility_24
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    painter = painterResource(iconResource), contentDescription = ""
+                                )
+                            }
+                        })
+                    Row(
+                        modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End
+                    ) {
+                        Button(modifier = Modifier.padding(horizontal = 3.dp), onClick = {
+                            composeProgressStatus.value = true
+                            navController.navigate(Screen.Signin.route)
+                        }) {
+                            Text(text = context.getString(R.string.signin))
+                        }
+                        Button(onClick = {
+                            composeProgressStatus.value = true
+                            usernameError = formHelper.checkUsername(usernameVal)
+                            emailError = formHelper.checkEmail(emailVal)
+                            passwordError = formHelper.checkPassword(passwordVal)
+                            if (!(usernameError && emailError && passwordError)) {
+                                try {
+                                    //add to remote server
 
-                                                val user = User(
-                                                    0,
-                                                    helper.getNOWasSQLDate(),
-                                                    enUserVal,
-                                                    enEmailVal,
-                                                    null,
-                                                    null
-                                                )
-                                                scope.launch {
-                                                    userviewModel.insertUser(user)
-                                                    delay(300)
+                                    IApiService.getInstance()
+                                    val apiSrv = IApiService.apiService
+                                    val call: Call<EventResult> = apiSrv!!.srvSignUp(
+                                        SignUpRequest(
+                                            emailVal,
+                                            passwordVal,
+                                            usernameVal
+                                        )
+                                    )
+                                    call.enqueue(object : Callback<EventResult> {
+                                        override fun onResponse(
+                                            call: Call<EventResult>,
+                                            response: Response<EventResult>,
+                                        ) {
+                                            if (response.isSuccessful) {
+                                                if (response.body()!!.eventresultflag == 0) {
+                                                    //now u can add form items to database
+                                                    val enUserVal = security.encrypt(usernameVal)
+                                                    val enEmailVal = security.encrypt(emailVal)
+
+                                                    val user = User(
+                                                        0,
+                                                        helper.getNOWasSQLDate(),
+                                                        enUserVal,
+                                                        enEmailVal,
+                                                        null,
+                                                        null
+                                                    )
+                                                    scope.launch {
+                                                        userviewModel.insertUser(user)
+                                                        delay(300)
+                                                        composeProgressStatus.value = false
+                                                        remoteResultOpenDialog = true
+                                                    }
+                                                } else {
+                                                    if (response.body()!!.error != null) {
+                                                        val eRror = response.body()!!.error!!
+                                                        Toast.makeText(
+                                                            context,
+                                                            "Error Code : ${eRror.code}, Exception: ${eRror.exception}",
+                                                            Toast.LENGTH_LONG
+                                                        ).show()
+                                                    }
                                                     composeProgressStatus.value = false
-                                                    remoteResultOpenDialog = true
                                                 }
-                                            } else {
-                                                if (response.body()!!.error != null) {
-                                                    val eRror = response.body()!!.error!!
-                                                    Toast.makeText(
-                                                        context,
-                                                        "Error Code : ${eRror.code}, Exception: ${eRror.exception}",
-                                                        Toast.LENGTH_LONG
-                                                    ).show()
-                                                }
-                                                composeProgressStatus.value = false
                                             }
                                         }
-                                    }
 
-                                    override fun onFailure(
-                                        call: Call<EventResult>,
-                                        t: Throwable,
-                                    ) {
-                                        Toast.makeText(
-                                            context,
-                                            "Error Code : SRV_REGEX10, Message : ${t.message.toString()}",
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                    }
-                                })
-                            } catch (ex: Exception) {
-                                Toast.makeText(
-                                    context,
-                                    "General Exception: ${ex.message}",
-                                    Toast.LENGTH_LONG
-                                ).show()
+                                        override fun onFailure(
+                                            call: Call<EventResult>,
+                                            t: Throwable,
+                                        ) {
+                                            Toast.makeText(
+                                                context,
+                                                "Error Code : SRV_REGEX10, Message : ${t.message.toString()}",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    })
+                                } catch (ex: Exception) {
+                                    Toast.makeText(
+                                        context,
+                                        "General Exception: ${ex.message}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    composeProgressStatus.value = false
+                                }
+                            } else {
                                 composeProgressStatus.value = false
                             }
-                        } else {
-                            composeProgressStatus.value = false
+                        }) {
+                            Text(text = context.getString(R.string.save))
                         }
-                    }) {
-                        Text(text = context.getString(R.string.save))
                     }
                 }
             }
-        }
-        LaunchedEffect(Unit) {
-            delay(200)
-            composeProgressStatus.value = false
-        }
-    }
-}
-
-@Composable
-fun LocaationRationaleAlert(onDismiss: () -> Unit, onConfirm: () -> Unit) {
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties()
-    ) {
-        Surface(
-            modifier = Modifier
-                .wrapContentWidth()
-                .wrapContentHeight(),
-            shape = MaterialTheme.shapes.large,
-            tonalElevation = AlertDialogDefaults.TonalElevation
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "We need location permissions to use this app",
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                TextButton(
-                    onClick = {
-                        onConfirm()
-                        onDismiss()
-                    },
-                    modifier = Modifier.align(Alignment.End)
-                ) {
-                    Text("OK")
-                }
+            LaunchedEffect(Unit) {
+                delay(200)
+                composeProgressStatus.value = false
             }
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1164,7 +1243,6 @@ fun DeviceDashboard(
     composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
     var deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
 
     var chkNotificationCheckState by remember { mutableStateOf(false) }
@@ -1253,7 +1331,9 @@ fun DeviceDashboard(
                                 contentColor = Color.White,
                                 disabledContentColor = Color.DarkGray
                             ),
-                            onClick = { /*TODO*/ }) {
+                            onClick = {
+                                navController.navigate("trackmydevice/${deviceDetail.macaddress}")
+                            }) {
                             Icon(
                                 painter = painterResource(id = R.drawable.baseline_track_changes_24),
                                 tint = Color.Red,
@@ -1282,7 +1362,9 @@ fun DeviceDashboard(
                                 contentColor = Color.White,
                                 disabledContentColor = Color.DarkGray
                             ),
-                            onClick = { /*TODO*/ }) {
+                            onClick = {
+                                navController.navigate("findmydevice/${deviceDetail.macaddress}")
+                            }) {
                             Icon(
                                 painter = painterResource(id = R.drawable.baseline_wifi_find_24),
                                 tint = Color.Red,
@@ -1321,7 +1403,7 @@ fun DeviceDashboard(
                             ),
                         ) {
                             Column(
-                                modifier=Modifier.fillMaxSize(),
+                                modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.Center,
                                 horizontalAlignment = Alignment.CenterHorizontally
                             )
@@ -1367,7 +1449,7 @@ fun DeviceDashboard(
                             ),
                         ) {
                             Column(
-                                modifier=Modifier.fillMaxSize(),
+                                modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.Center,
                                 horizontalAlignment = Alignment.CenterHorizontally
                             )
@@ -1404,6 +1486,44 @@ fun DeviceDashboard(
 
     }
     composeProgressStatus.value = false
+}
+
+@Composable
+fun FindMyDevice(
+    macaddress: String?,
+    navController: NavController,
+    composeProgressStatus: MutableState<Boolean>,
+    userviewModel: userViewModel = hiltViewModel(),
+) {
+    //composeProgressStatus.value = true
+    val context = LocalContext.current.applicationContext
+    val bluetoothScanner = BluetoothScanner(context)
+
+    val scope = rememberCoroutineScope()
+    var deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
+
+
+    LaunchedEffect(Unit){
+        bluetoothScanner.listOfMacaddress.add(deviceDetail!!.macaddress.uppercase(Locale.ROOT))
+        delay(300)
+        bluetoothScanner.InitScan()
+        delay(320)
+        bluetoothScanner.StartScan()
+    }
+
+    Column {
+        Text(text = "${deviceDetail?.name}")
+    }
+}
+
+@Composable
+fun TrackMyDevice(
+    macaddress: String?,
+    navController: NavController,
+    composeProgressStatus: MutableState<Boolean>,
+    userviewModel: userViewModel = hiltViewModel(),
+) {
+
 }
 
 /*@Preview(showBackground = true)
