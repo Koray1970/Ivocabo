@@ -78,6 +78,7 @@ import androidx.compose.material3.rememberDismissState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
@@ -266,6 +267,7 @@ class MainActivity : ComponentActivity() {
 
 val helper = Helper()
 private lateinit var currentLocation: LatLng
+private val dummyDevice = Device(null, "", null, "", null, null, null, null, null, null)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -302,87 +304,92 @@ fun Dashboard(
     userviewModel: userViewModel = hiltViewModel(),
     locationViewModel: LocationViewModel = hiltViewModel(),
 ) {
-
+    composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
     val locationPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
         LocationPermission(context)
     if (!locationPermissionStatus.first) {
         LaunchedEffect(Unit) {
             delay(300)
+            composeProgressStatus.value = false
             locationPermissionStatus.second.launchMultiplePermissionRequest()
         }
     } else {
         val scope = rememberCoroutineScope()
 
-        val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
-        userviewModel.getDbDeviceList()
+        val focusManager = LocalFocusManager.current
+        val keyboardController = LocalSoftwareKeyboardController.current
+        val tDevice = dummyDevice
+        var deviceIconlist = remember { mutableListOf<FormDeviceItem>() }
+        var selectedOption by remember { mutableStateOf<FormDeviceItem>(FormDeviceItem(0, 0, 0)) }
+        var onOptionSelected by remember { mutableStateOf<FormDeviceItem>(FormDeviceItem(0, 0, 0)) }
 
-        //start:Map Properties
+
+        var deviceName by rememberSaveable { mutableStateOf(tDevice.name) }
+        var deviceMacaddress by rememberSaveable { mutableStateOf(tDevice.macaddress) }
+
+        val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
         val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
         var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
         val cameraState = rememberCameraState {
             geoPoint = GeoPoint(0.0, 0.0)
             zoom = 19.0 // optional, default is 5.0
         }
+        SideEffect {
+            userviewModel.getDbDeviceList()
 
-        scope.launch {
-            locationViewModel.latlang.cancellable().collect {
-                Log.v(
-                    "Location Detail",
-                    "Status: ${it.statestatus}"
-                )
-                when (it.statestatus) {
-                    LOCATIONSTATUS.Running -> {
-                        currentLocation = it.latlng
-
-                        val geopoint = GeoPoint(currentLocation.latitude, currentLocation.longitude)
-                        cameraState.geoPoint = geopoint
-                        mapMarkerState.geoPoint = geopoint
-
-                        mapProperties = mapProperties
-                            .copy(isTilesScaledToDpi = true)
-                            .copy(tileSources = TileSourceFactory.MAPNIK)
-                            .copy(isEnableRotationGesture = false)
-                            .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+            //start::Device Form assets
+            val deviceFormHelper = DeviceFormHelper()
+            deviceIconlist = deviceFormHelper.FormDeviceList(context)
+            var nselecteddevice = deviceIconlist.first()
+            if (tDevice.devicetype != null)
+                nselecteddevice = deviceIconlist.first { it.id == tDevice.devicetype!! }
+            selectedOption = nselecteddevice
+            onOptionSelected = nselecteddevice
 
 
-                        Log.v(
-                            "Location Detail",
-                            "Location: ${currentLocation.latitude},${currentLocation.longitude} "
-                        )
+            //start:Map Properties
+            scope.launch {
+                locationViewModel.latlang.cancellable().collect {
+                    Log.v(
+                        "Location Detail",
+                        "Status: ${it.statestatus}"
+                    )
+                    when (it.statestatus) {
+                        LOCATIONSTATUS.Running -> {
+                            currentLocation = it.latlng
+
+                            val geopoint =
+                                GeoPoint(currentLocation.latitude, currentLocation.longitude)
+                            cameraState.geoPoint = geopoint
+                            mapMarkerState.geoPoint = geopoint
+
+                            mapProperties = mapProperties
+                                .copy(isTilesScaledToDpi = true)
+                                .copy(tileSources = TileSourceFactory.MAPNIK)
+                                .copy(isEnableRotationGesture = false)
+                                .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+
+
+                            Log.v(
+                                "Location Detail",
+                                "Location: ${currentLocation.latitude},${currentLocation.longitude} "
+                            )
+                        }
+
+                        LOCATIONSTATUS.Has_Exception -> Log.v("Location Detail", "has exception")
+                        else -> Log.v("Location Detail", "NOTHING")
                     }
-
-                    LOCATIONSTATUS.Has_Exception -> Log.v("Location Detail", "has exception")
-                    else -> Log.v("Location Detail", "NOTHING")
                 }
+
+            }
+            //end:Map Properties
+            MainScope().launch {
+                delay(320)
+                composeProgressStatus.value = false
             }
         }
-
-        //end:Map Properties
-
-        //start::Device Form assets
-        val tDevice = Device(null, "", null, "", null, null, null, null, null, null)
-
-        val focusManager = LocalFocusManager.current
-        val keyboardController = LocalSoftwareKeyboardController.current
-
-        var deviceName by rememberSaveable { mutableStateOf(tDevice.name) }
-        var deviceMacaddress by rememberSaveable { mutableStateOf(tDevice.macaddress) }
-
-        val deviceFormHelper = DeviceFormHelper()
-        val devicelist = deviceFormHelper.FormDeviceList(context)
-        var nselecteddevice = devicelist.first()
-        if (tDevice.devicetype != null)
-            nselecteddevice = devicelist.first { it.id == tDevice.devicetype!! }
-        var (selectedOption, onOptionSelected) = remember {
-            mutableStateOf(
-                mutableStateOf(
-                    nselecteddevice
-                )
-            )
-        }
         //end::Device Form assets
-        composeProgressStatus.value = false
         Scaffold(floatingActionButton = {
             FloatingActionButton(
                 shape = CircleShape,
@@ -571,21 +578,21 @@ fun Dashboard(
                     )
                     Spacer(modifier = Modifier.height(20.dp))
                     Column(Modifier.selectableGroup()) {
-                        devicelist.forEach {
+                        deviceIconlist.forEach {
                             Row(
                                 Modifier
                                     .fillMaxWidth()
                                     .height(56.dp)
                                     .selectable(
-                                        selected = (it.id == selectedOption.value.id),
-                                        onClick = { onOptionSelected(mutableStateOf(it)) },
+                                        selected = (it.id == selectedOption.id),
+                                        onClick = { onOptionSelected = it },
                                         role = Role.RadioButton
                                     )
                                     .padding(horizontal = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 RadioButton(
-                                    selected = (it.id == selectedOption.value.id),
+                                    selected = (it.id == selectedOption.id),
                                     onClick = null // null recommended for accessibility with screenreaders
                                 )
                                 Text(
@@ -622,7 +629,7 @@ fun Dashboard(
                                     keyboardController!!.hide()
                                     tDevice.name = deviceName
                                     tDevice.macaddress = deviceMacaddress
-                                    tDevice.devicetype = selectedOption.value.id
+                                    tDevice.devicetype = selectedOption.id
                                     tDevice.latitude = currentLocation.latitude.toString()
                                     tDevice.longitude = currentLocation.longitude.toString()
                                     tDevice.registerdate = helper.getNOWasString()
@@ -634,8 +641,8 @@ fun Dashboard(
                                             deviceName = ""
                                             deviceMacaddress = ""
 
-                                            selectedOption = mutableStateOf(devicelist.first())
-                                            onOptionSelected(mutableStateOf(devicelist.first()))
+                                            selectedOption = deviceIconlist.first()
+                                            onOptionSelected = deviceIconlist.first()
 
                                             scope.launch {
                                                 if (userviewModel.devicelist.add(tDevice)) {
@@ -1200,31 +1207,37 @@ fun DeviceDashboard(
             delay(300)
             bluetoothPermissionStatus.second.launchMultiplePermissionRequest()
         }
+        composeProgressStatus.value = false
     } else {
-        //val scope = rememberCoroutineScope()
-        val deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
-
+        val scope = rememberCoroutineScope()
+        var deviceDetail by remember { mutableStateOf<Device>(dummyDevice) }
         var chkNotificationCheckState by remember { mutableStateOf(false) }
         var chkMissingCheckState by remember { mutableStateOf(false) }
-        //start:Map Properties
         val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
         var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
         val cameraState = rememberCameraState {
             geoPoint = GeoPoint(0.0, 0.0)
             zoom = 19.0 // optional, default is 5.0
         }
+        SideEffect {
+            deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
 
-        val geopoint =
-            GeoPoint(deviceDetail?.latitude!!.toDouble(), deviceDetail.longitude!!.toDouble())
-        cameraState.geoPoint = geopoint
-        mapMarkerState.geoPoint = geopoint
+            //start:Map Properties
+            val geopoint =
+                GeoPoint(deviceDetail?.latitude!!.toDouble(), deviceDetail.longitude!!.toDouble())
+            cameraState.geoPoint = geopoint
+            mapMarkerState.geoPoint = geopoint
 
-        mapProperties = mapProperties
-            .copy(isTilesScaledToDpi = true)
-            .copy(tileSources = TileSourceFactory.MAPNIK)
-            .copy(isEnableRotationGesture = false)
-            .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
-
+            mapProperties = mapProperties
+                .copy(isTilesScaledToDpi = true)
+                .copy(tileSources = TileSourceFactory.MAPNIK)
+                .copy(isEnableRotationGesture = false)
+                .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+            scope.launch {
+                delay(320)
+                composeProgressStatus.value = false
+            }
+        }
         //end:Map Properties
         Scaffold(
             floatingActionButton = {
@@ -1249,7 +1262,7 @@ fun DeviceDashboard(
                         .fillMaxWidth()
                         .height(280.dp),
                     cameraState = cameraState,
-                    properties = mapProperties, // add properties
+                    properties = mapProperties
                 ) { Marker(state = mapMarkerState) }
                 HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
                 Box(
@@ -1438,10 +1451,8 @@ fun DeviceDashboard(
                     }
                 }
             }
-
         }
     }
-    composeProgressStatus.value = false
 }
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -1452,7 +1463,7 @@ fun FindMyDevice(
     composeProgressStatus: MutableState<Boolean>,
     userviewModel: userViewModel = hiltViewModel(),
 ) {
-    //composeProgressStatus.value = true
+    composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
 
     val bluetoothPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
@@ -1482,8 +1493,11 @@ fun FindMyDevice(
         }
         var metricDistance = "-"
         val currentRssiState = bluetoothScanner.getCurrentRSSI().observeAsState()
-        if (currentRssiState?.value != null)
+        if (currentRssiState?.value != null) {
+            if (composeProgressStatus.value)
+                composeProgressStatus.value = false
             metricDistance = helper.CalculateRSSIToMeter(currentRssiState.value).toString() + "mt"
+        }
         Scaffold(
             floatingActionButton = {
                 FloatingActionButton(
@@ -1568,7 +1582,9 @@ fun FindMyDevice(
                     )
                     Text(
                         text = metricDistance,
-                        modifier = Modifier.fillMaxWidth().border(1.dp, Color.DarkGray),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Color.DarkGray),
                         style = TextStyle(
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 48.sp,
@@ -1578,9 +1594,7 @@ fun FindMyDevice(
                 }
             }
         }
-        BackHandler(true) {
-
-        }
+        BackHandler(true) {}
     }
 
 }
