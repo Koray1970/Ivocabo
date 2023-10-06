@@ -36,9 +36,19 @@
     <!--End::Device Dashboard-->
     <!--Start::Find My Device-->
     <string name="findmydevicetitle">Find My Device</string>
-    <string name="scanning">Scanning</string>
+    <string name="scanning">Scanning...</string>
     <string name="devicefind">Device Find</string>
     <string name="devicename">Device Name</string>
     <string name="distancefromdevice">Distance From Device</string>
+    <string name="distancefromdevicewarning">The device is within the diameter given above.</string>
+
     <!--End::Find My Device-->
+    <!--Start::Track My Device-->
+    <string name="trackmydevicetitle">Track My Device</string>
+    <string name="connectingtodevice">Please wait, connecting to the device.</string>
+    <string name="deviceconnected">The device is connected.</string>
+    <string name="devicestillconnected">The device is still connected.</string>
+    <string name="deviceconnectionislost">The device connection is lost.</string>
+    <string name="devicecannotbereached">The device cannot be reached.</string>
+    <!--End::Track My Device-->
 </resources>
