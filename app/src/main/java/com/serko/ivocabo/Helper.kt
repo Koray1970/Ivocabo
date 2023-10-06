@@ -5,6 +5,8 @@ import java.sql.Date
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.regex.Pattern
+import kotlin.math.pow
+import kotlin.math.round
 
 class Helper {
 
@@ -43,5 +45,16 @@ class Helper {
 
     fun isEmailValid(email:String):Boolean{
         return Patterns.EMAIL_ADDRESS.matcher(email).matches()
+    }
+    fun CalculateRSSIToMeter(rssi:Int?):String?{
+        if(rssi!=null) {
+            /*val result = 10.0.pow((-59 - (rssi)) / (10 * 2).toDouble())
+            return String.format("%.2f", result)*/
+            val beaconDefaultMinRSSI = -59
+            val currentRssiRangeIn = beaconDefaultMinRSSI - rssi
+            val distanceA = currentRssiRangeIn.toDouble() * .05
+            return (round(10 * Math.pow(10.0, distanceA)) / 10).toString()
+        }
+        return null
     }
 }

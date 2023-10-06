@@ -1,7 +1,6 @@
 package com.serko.ivocabo
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -20,6 +19,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectable
@@ -79,6 +80,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -96,6 +98,7 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -115,9 +118,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
-import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.google.accompanist.permissions.shouldShowRationale
 import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
 import com.serko.ivocabo.api.IApiService
@@ -141,6 +141,7 @@ import com.utsman.osmandcompose.ZoomButtonVisibility
 import com.utsman.osmandcompose.rememberCameraState
 import com.utsman.osmandcompose.rememberMarkerState
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.cancellable
 import kotlinx.coroutines.launch
@@ -303,7 +304,8 @@ fun Dashboard(
 ) {
 
     val context = LocalContext.current.applicationContext
-    var locationPermissionStatus:Pair<Boolean,MultiplePermissionsState> = LocationPermission(context)
+    val locationPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
+        LocationPermission(context)
     if (!locationPermissionStatus.first) {
         LaunchedEffect(Unit) {
             delay(300)
@@ -327,11 +329,11 @@ fun Dashboard(
             locationViewModel.latlang.cancellable().collect {
                 Log.v(
                     "Location Detail",
-                    "Status: ${it?.statestatus}"
+                    "Status: ${it.statestatus}"
                 )
-                when (it?.statestatus) {
+                when (it.statestatus) {
                     LOCATIONSTATUS.Running -> {
-                        currentLocation = it!!.latlng
+                        currentLocation = it.latlng
 
                         val geopoint = GeoPoint(currentLocation.latitude, currentLocation.longitude)
                         cameraState.geoPoint = geopoint
@@ -594,14 +596,14 @@ fun Dashboard(
                                 Icon(
                                     painter = painterResource(id = it.image),
                                     modifier = Modifier.padding(start = 16.dp),
-                                    contentDescription = "${context.getString(it.name)}"
+                                    contentDescription = context.getString(it.name)
                                 )
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(20.dp))
                     Row {
-                        var obsAddEdit = userviewModel.mutablelivedataRMEventResult.collectAsState()
+                        val obsAddEdit = userviewModel.mutablelivedataRMEventResult.collectAsState()
                         Button(
                             onClick = {
                                 deviceName = ""
@@ -627,7 +629,7 @@ fun Dashboard(
 
                                     userviewModel.addUpdateDevice(tDevice)
 
-                                    when (obsAddEdit.value?.stateStatus) {
+                                    when (obsAddEdit.value.stateStatus) {
                                         RMEventStatus.Complete -> {
                                             deviceName = ""
                                             deviceMacaddress = ""
@@ -646,7 +648,7 @@ fun Dashboard(
 
                                         RMEventStatus.Exception -> {
                                             composeProgressStatus.value = false
-                                            var formEventRes = obsAddEdit.value?.formEventResult
+                                            val formEventRes = obsAddEdit.value.formEventResult
                                             if (formEventRes != null) {
                                                 if (formEventRes.error != null) {
                                                     Toast.makeText(
@@ -690,7 +692,8 @@ fun SignIn(
     userviewModel: userViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current.applicationContext
-    var locationPermissionStatus:Pair<Boolean,MultiplePermissionsState> = LocationPermission(context)
+    val locationPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
+        LocationPermission(context)
 
     if (!locationPermissionStatus.first) {
         LaunchedEffect(Unit) {
@@ -866,7 +869,7 @@ fun SignIn(
 
                                     override fun onFailure(
                                         call: Call<SignInResponse>,
-                                        t: Throwable
+                                        t: Throwable,
                                     ) {
                                         /*result.eventResult.error = Error(
                                         "SRV_SNG10",
@@ -898,7 +901,6 @@ fun SignIn(
 }
 
 
-
 @OptIn(ExperimentalPermissionsApi::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -910,7 +912,8 @@ fun Signup(
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
 
-    var locationPermissionStatus:Pair<Boolean,MultiplePermissionsState> = LocationPermission(context)
+    val locationPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
+        LocationPermission(context)
 
     if (!locationPermissionStatus.first) {
         LaunchedEffect(Unit) {
@@ -1178,7 +1181,7 @@ fun Signup(
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun DeviceDashboard(
     macaddress: String?,
@@ -1189,7 +1192,8 @@ fun DeviceDashboard(
 ) {
     composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
-    var bluetoothPermissionStatus:Pair<Boolean,MultiplePermissionsState> =BluetoothPermission(context)
+    val bluetoothPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
+        BluetoothPermission(context)
 
     if (!bluetoothPermissionStatus.first) {
         LaunchedEffect(Unit) {
@@ -1197,8 +1201,8 @@ fun DeviceDashboard(
             bluetoothPermissionStatus.second.launchMultiplePermissionRequest()
         }
     } else {
-        val scope = rememberCoroutineScope()
-        var deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
+        //val scope = rememberCoroutineScope()
+        val deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
 
         var chkNotificationCheckState by remember { mutableStateOf(false) }
         var chkMissingCheckState by remember { mutableStateOf(false) }
@@ -1211,7 +1215,7 @@ fun DeviceDashboard(
         }
 
         val geopoint =
-            GeoPoint(deviceDetail?.latitude!!.toDouble(), deviceDetail?.longitude!!.toDouble())
+            GeoPoint(deviceDetail?.latitude!!.toDouble(), deviceDetail.longitude!!.toDouble())
         cameraState.geoPoint = geopoint
         mapMarkerState.geoPoint = geopoint
 
@@ -1238,12 +1242,12 @@ fun DeviceDashboard(
                     }
                 )
             }, floatingActionButtonPosition = FabPosition.Start
-        ) {
+        ) { it ->
             Column(modifier = Modifier.padding(it)) {
                 OpenStreetMap(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(380.dp),
+                        .height(280.dp),
                     cameraState = cameraState,
                     properties = mapProperties, // add properties
                 ) { Marker(state = mapMarkerState) }
@@ -1259,12 +1263,12 @@ fun DeviceDashboard(
                             .padding(20.dp)
                     ) {
                         Text(
-                            text = "${deviceDetail?.name}",
+                            text = deviceDetail.name,
                             style = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold),
                             color = Color.White
                         )
                         Text(
-                            text = "${deviceDetail?.macaddress} ${deviceDetail?.registerdate}",
+                            text = "${deviceDetail.macaddress} ${deviceDetail.registerdate}",
                             style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Light),
                             color = Color.White
                         )
@@ -1296,12 +1300,10 @@ fun DeviceDashboard(
                                     contentDescription = null
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                val txttrack = "${
-                                    String.format(
-                                        context.getString(R.string.tracking),
-                                        "\n${deviceDetail?.name}"
-                                    )
-                                }"
+                                val txttrack = String.format(
+                                    context.getString(R.string.tracking),
+                                    "\n${deviceDetail.name}"
+                                )
                                 Text(text = txttrack, color = Color.White)
                             }
                             Spacer(modifier = Modifier.width(10.dp))
@@ -1329,12 +1331,10 @@ fun DeviceDashboard(
                                     contentDescription = null
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
-                                val txtfindmydevice = "${
-                                    String.format(
-                                        context.getString(R.string.findmydevice),
-                                        "\n${deviceDetail?.name}"
-                                    )
-                                }"
+                                val txtfindmydevice = String.format(
+                                    context.getString(R.string.findmydevice),
+                                    "\n${deviceDetail.name}"
+                                )
                                 Text(text = txtfindmydevice, color = Color.White)
                             }
                         }
@@ -1365,8 +1365,8 @@ fun DeviceDashboard(
                                 {
                                     Switch(
                                         checked = chkNotificationCheckState,
-                                        onCheckedChange = {
-                                            chkNotificationCheckState = it
+                                        onCheckedChange = { cc ->
+                                            chkNotificationCheckState = cc
                                         },
                                         thumbContent = if (chkNotificationCheckState) {
                                             {
@@ -1455,7 +1455,8 @@ fun FindMyDevice(
     //composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
 
-    var bluetoothPermissionStatus:Pair<Boolean,MultiplePermissionsState> =BluetoothPermission(context)
+    val bluetoothPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
+        BluetoothPermission(context)
 
     if (!bluetoothPermissionStatus.first) {
         LaunchedEffect(Unit) {
@@ -1467,7 +1468,10 @@ fun FindMyDevice(
 
         val scope = rememberCoroutineScope()
         var deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
-
+        var deviceIcon = R.drawable.t3_icon_32
+        if (deviceDetail?.devicetype != null)
+            if (deviceDetail?.devicetype == 2)
+                deviceIcon = R.drawable.e9_icon_32
 
         LaunchedEffect(Unit) {
             bluetoothScanner.listOfMacaddress.add(deviceDetail!!.macaddress.uppercase(Locale.ROOT))
@@ -1476,12 +1480,106 @@ fun FindMyDevice(
             delay(320)
             bluetoothScanner.StartScan()
         }
+        var metricDistance = "-"
+        val currentRssiState = bluetoothScanner.getCurrentRSSI().observeAsState()
+        if (currentRssiState?.value != null)
+            metricDistance = helper.CalculateRSSIToMeter(currentRssiState.value).toString() + "mt"
+        Scaffold(
+            floatingActionButton = {
+                FloatingActionButton(
+                    containerColor = Color.Green,
+                    shape = CircleShape,
+                    onClick = {
+                        MainScope().launch {
+                            bluetoothScanner.StopScan()
+                            delay(300)
+                            navController.navigate("devicedashboard/${deviceDetail?.macaddress}")
+                        }
+                    },
+                    content = {
+                        Icon(
+                            painter = painterResource(id = R.drawable.baseline_arrow_back_24),
+                            contentDescription = ""
+                        )
+                    }
+                )
+            }, floatingActionButtonPosition = FabPosition.Start
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(it)
+                    .fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
 
-        Column {
-            Text(text = "${deviceDetail?.name}")
+                Text(
+                    text = context.getString(R.string.findmydevicetitle),
+                    style = TextStyle(
+                        fontWeight = FontWeight.ExtraBold,
+                        fontStyle = FontStyle.Normal,
+                        fontSize = 32.sp
+                    )
+                )
+                Spacer(modifier = Modifier.height(40.dp))
+                Image(
+                    painter = painterResource(id = deviceIcon),
+                    modifier = Modifier.size(120.dp),
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.height(40.dp))
+                Row(modifier = Modifier.wrapContentWidth()) {
+                    Text(
+                        text = context.getString(R.string.devicename),
+                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    )
+                    Text(
+                        text = " : ",
+                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    )
+                    Text(
+                        text = "${deviceDetail?.name}",
+                        style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
+                    )
+                }
+                Row(modifier = Modifier.wrapContentWidth()) {
+                    Text(
+                        text = context.getString(R.string.macaddress),
+                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    )
+                    Text(
+                        text = " : ",
+                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    )
+                    Text(
+                        text = "${deviceDetail?.macaddress}",
+                        style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
+                    )
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(0.dp, 40.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = context.getString(R.string.distancefromdevice),
+                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                    )
+                    Text(
+                        text = metricDistance,
+                        modifier = Modifier.fillMaxWidth().border(1.dp, Color.DarkGray),
+                        style = TextStyle(
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 48.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    )
+                }
+            }
         }
         BackHandler(true) {
-            bluetoothScanner.StopScan()
+
         }
     }
 

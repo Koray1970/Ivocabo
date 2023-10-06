@@ -14,7 +14,7 @@
     <string name="rgResultDialogContent">Congratulations, your membership process has been completed successfully, please sign in.</string>
     <string name="deviceformTitle">Ivocabo Device Form</string>
     <string name="name">Name</string>
-    <string name="macaddress">Mac Address</string>
+    <string name="macaddress">MAC Address</string>
     <string name="t3device">T3</string>
     <string name="e9device">E9</string>
     <string name="title_activity_splash">SplashActivity</string>
@@ -34,4 +34,11 @@
     <string name="findmydevice">Find %s</string>
     <string name="missing">Missing</string>
     <!--End::Device Dashboard-->
+    <!--Start::Find My Device-->
+    <string name="findmydevicetitle">Find My Device</string>
+    <string name="scanning">Scanning</string>
+    <string name="devicefind">Device Find</string>
+    <string name="devicename">Device Name</string>
+    <string name="distancefromdevice">Distance From Device</string>
+    <!--End::Find My Device-->
 </resources>
