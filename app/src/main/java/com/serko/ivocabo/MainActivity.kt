@@ -1498,10 +1498,10 @@ fun FindMyDevice(
             composeProgressStatus.value = false
         }
         val currentRssiState by bluetoothScanner.getCurrentRSSI().observeAsState()
-        try {
+        /*try {
             Log.v("MainActivity", "${checkNotNull(currentRssiState)}")
         }
-        catch (e:Exception){}
+        catch (e:Exception){}*/
         if (currentRssiState == null) {
             LaunchedEffect(Unit) {
                 delay(4000)
