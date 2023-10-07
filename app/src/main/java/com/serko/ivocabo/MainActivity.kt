@@ -1280,7 +1280,7 @@ fun DeviceDashboard(
                             color = Color.White
                         )
                         Text(
-                            text = "${deviceDetail.macaddress} ${deviceDetail.registerdate}",
+                            text = "${deviceDetail.macaddress.uppercase(Locale.ROOT)} ${deviceDetail.registerdate}",
                             style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Light),
                             color = Color.White
                         )
@@ -1478,7 +1478,7 @@ fun FindMyDevice(
         }
     } else {
         val scope = rememberCoroutineScope()
-        var metricDistance by remember{ mutableStateOf(context.getString(R.string.scanning)) }
+        var metricDistance by remember { mutableStateOf(context.getString(R.string.scanning)) }
         var deviceDetail by remember { mutableStateOf(dummyDevice) }
         var deviceIcon = R.drawable.t3_icon_32
         bluetoothScanner = BluetoothScanner(context)
@@ -1487,7 +1487,7 @@ fun FindMyDevice(
         if (deviceDetail?.devicetype != null)
             if (deviceDetail?.devicetype == 2)
                 deviceIcon = R.drawable.e9_icon_32
-        var _macaddress=macaddress.uppercase()
+        var _macaddress = macaddress.uppercase()
         bluetoothScanner.listOfMacaddress.add(_macaddress)
         LaunchedEffect(Unit) {
             delay(300)
@@ -1498,27 +1498,30 @@ fun FindMyDevice(
             composeProgressStatus.value = false
         }
         val currentRssiState by bluetoothScanner.getCurrentRSSI().observeAsState()
-        /*try {
-            Log.v("MainActivity", "${checkNotNull(currentRssiState)}")
-        }
-        catch (e:Exception){}*/
+
+        val defaultMetricTextStyle=TextStyle(fontWeight = FontWeight.ExtraBold, fontSize = 48.sp, textAlign = TextAlign.Center)
+        val scanningMetricTextStyle=TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp, textAlign = TextAlign.Center, color = Color.Red)
+        var metricDistanceTextStyle by remember{ mutableStateOf<TextStyle>(defaultMetricTextStyle) }
         if (currentRssiState == null) {
             LaunchedEffect(Unit) {
-                delay(4000)
+                metricDistanceTextStyle=scanningMetricTextStyle
                 metricDistance = context.getString(R.string.scanning)
-                delay(5000)
-                metricDistance = context.getString(R.string.devicecannotbereached)
-                composeProgressStatus.value=false
+                delay(7000)
+                if(currentRssiState == null) {
+                    composeProgressStatus.value = false
+                    metricDistance = context.getString(R.string.devicecannotbereached)
+                    delay(5000)
+                }
             }
-
-        }
-        else{
+        } else {
+            metricDistanceTextStyle=defaultMetricTextStyle
             if (composeProgressStatus.value)
                 composeProgressStatus.value = false
             metricDistance =
                 helper.CalculateRSSIToMeter(currentRssiState).toString() + "mt"
-            Log.v("MainActivity","${checkNotNull(currentRssiState)}")
+            Log.v("MainActivity", "${checkNotNull(currentRssiState)}")
         }
+
         Scaffold(
             floatingActionButton = {
                 FloatingActionButton(
@@ -1597,16 +1600,17 @@ fun FindMyDevice(
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(1.dp, Color.DarkGray),
-                        style = TextStyle(
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 48.sp,
-                            textAlign = TextAlign.Center
-                        )
+                        style = metricDistanceTextStyle
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = context.getString(R.string.distancefromdevicewarning),
-                        style = TextStyle(fontWeight = FontWeight.Light, fontSize = 12.sp, fontStyle = FontStyle.Italic, color = Color.LightGray)
+                        style = TextStyle(
+                            fontWeight = FontWeight.Light,
+                            fontSize = 12.sp,
+                            fontStyle = FontStyle.Italic,
+                            color = Color.LightGray
+                        )
                     )
                 }
             }
@@ -1633,34 +1637,53 @@ fun TrackMyDevice(
     if (!bluetoothPermissionStatus.first) {
         LaunchedEffect(Unit) {
             delay(300)
+            composeProgressStatus.value = false
             bluetoothPermissionStatus.second.launchMultiplePermissionRequest()
         }
     } else {
-        val bluetoothScanner = BluetoothScanner(context)
-
         val scope = rememberCoroutineScope()
-        var deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
+        var metricDistance by remember { mutableStateOf(context.getString(R.string.scanning)) }
+        var deviceDetail by remember { mutableStateOf(dummyDevice) }
         var deviceIcon = R.drawable.t3_icon_32
+        bluetoothScanner = BluetoothScanner(context)
+
+        deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
         if (deviceDetail?.devicetype != null)
             if (deviceDetail?.devicetype == 2)
                 deviceIcon = R.drawable.e9_icon_32
-
+        var _macaddress = macaddress.uppercase()
+        bluetoothScanner.listOfMacaddress.add(_macaddress)
         LaunchedEffect(Unit) {
-            bluetoothScanner.listOfMacaddress.add(deviceDetail!!.macaddress.uppercase(Locale.ROOT))
             delay(300)
             bluetoothScanner.InitScan()
             delay(320)
             bluetoothScanner.StartScan()
+            delay(5200)
+            composeProgressStatus.value = false
         }
-        val deviceDisconnectedEdge = 5000
-        var metricDistance = "-"
-        val currentRssiState = bluetoothScanner.getCurrentRSSI().observeAsState()
-        if (currentRssiState?.value != null) {
+        val currentRssiState by bluetoothScanner.getCurrentRSSI().observeAsState()
+
+        val defaultMetricTextStyle=TextStyle(fontWeight = FontWeight.ExtraBold, fontSize = 48.sp, textAlign = TextAlign.Center)
+        val scanningMetricTextStyle=TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp, textAlign = TextAlign.Center, color = Color.Red)
+        var metricDistanceTextStyle by remember{ mutableStateOf<TextStyle>(defaultMetricTextStyle) }
+        if (currentRssiState == null) {
+            LaunchedEffect(Unit) {
+                metricDistanceTextStyle=scanningMetricTextStyle
+                metricDistance = context.getString(R.string.scanning)
+                delay(7000)
+                if(currentRssiState == null) {
+                    composeProgressStatus.value = false
+                    metricDistance = context.getString(R.string.devicecannotbereached)
+                    delay(5000)
+                }
+            }
+        } else {
+            metricDistanceTextStyle=defaultMetricTextStyle
             if (composeProgressStatus.value)
                 composeProgressStatus.value = false
-            metricDistance = helper.CalculateRSSIToMeter(currentRssiState.value).toString() + "mt"
-        } else {
-
+            metricDistance =
+                helper.CalculateRSSIToMeter(currentRssiState).toString() + "mt"
+            Log.v("MainActivity", "${checkNotNull(currentRssiState)}")
         }
 
         Scaffold(
@@ -1691,7 +1714,6 @@ fun TrackMyDevice(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-
                 Text(
                     text = context.getString(R.string.trackmydevicetitle),
                     style = TextStyle(
@@ -1707,31 +1729,23 @@ fun TrackMyDevice(
                     contentDescription = null
                 )
                 Spacer(modifier = Modifier.height(40.dp))
-                Row(modifier = Modifier.wrapContentWidth()) {
+                Column(modifier = Modifier.wrapContentWidth()) {
                     Text(
                         text = context.getString(R.string.devicename),
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    )
-                    Text(
-                        text = " : ",
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     )
                     Text(
                         text = "${deviceDetail?.name}",
                         style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
                     )
-                }
-                Row(modifier = Modifier.wrapContentWidth()) {
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = context.getString(R.string.macaddress),
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     )
+
                     Text(
-                        text = " : ",
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    )
-                    Text(
-                        text = "${deviceDetail?.macaddress}",
+                        text = "$_macaddress",
                         style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
                     )
                 }
@@ -1750,10 +1764,16 @@ fun TrackMyDevice(
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(1.dp, Color.DarkGray),
+                        style = metricDistanceTextStyle
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = context.getString(R.string.distancefromdevicewarning),
                         style = TextStyle(
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 48.sp,
-                            textAlign = TextAlign.Center
+                            fontWeight = FontWeight.Light,
+                            fontSize = 12.sp,
+                            fontStyle = FontStyle.Italic,
+                            color = Color.LightGray
                         )
                     )
                 }

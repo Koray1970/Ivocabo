@@ -7,6 +7,7 @@
     <string name="password">Password</string>
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
+    <string name="ireadandunderstand">I read and understood</string>
     <string name="limit">Limit</string>
     <string name="signin">Sign in</string>
     <string name="signinTitle">Sign In</string>
@@ -51,4 +52,8 @@
     <string name="deviceconnectionislost">The device connection is lost.</string>
     <string name="devicecannotbereached">The device cannot be reached.</string>
     <!--End::Track My Device-->
+    <!--Start::Notification Permission-->
+    <string name="alrtnotificationtitle">Notification Permission</string>
+    <string name="alrtnotificationwarningtext">Device tracking needs your permission to send you notifications from within the app.</string>
+    <!--End::Notification Permission-->
 </resources>

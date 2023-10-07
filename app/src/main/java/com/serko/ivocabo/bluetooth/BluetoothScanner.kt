@@ -62,14 +62,14 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
             override fun onScanResult(callbackType: Int, result: ScanResult?) {
                 super.onScanResult(callbackType, result)
                 currentRssi.postValue (result?.rssi)
-                Log.v(TAG, "RSSI : ${result?.rssi}")
+                //Log.v(TAG, "RSSI : ${result?.rssi}")
             }
 
             override fun onBatchScanResults(results: MutableList<ScanResult>?) {
                 super.onBatchScanResults(results)
                 if (!results.isNullOrEmpty()) {
                     var totalRSSI = results!!.sumOf { a -> a.rssi } / results!!.size
-                    Log.v(TAG, "Avarage RSSI : $totalRSSI")
+                    //Log.v(TAG, "Avarage RSSI : $totalRSSI")
                     currentRssi.postValue(totalRSSI)
                 }
                 else{
