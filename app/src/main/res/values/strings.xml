@@ -52,8 +52,14 @@
     <string name="deviceconnectionislost">The device connection is lost.</string>
     <string name="devicecannotbereached">The device cannot be reached.</string>
     <!--End::Track My Device-->
+    <!--Start::Bluetooth Permission-->
+    <string name="alrtbluetoothtitle">Bluetooth &amp; Nearby Permission</string>
+    <string name="alrtbluetoothwarningtext">In order for the application to perform its main function, you need to grant Bluetooth &amp; Nearby permissions.</string>
+    <string name="alrtbluetoothdeniedtext">Bluetooth &amp; Nearby permissions have been denied, please provide these settings from the application permissions in the device settings.</string>
+    <!--End::Bluetooth Permission-->
     <!--Start::Notification Permission-->
     <string name="alrtnotificationtitle">Notification Permission</string>
     <string name="alrtnotificationwarningtext">Device tracking needs your permission to send you notifications from within the app.</string>
+    <string name="alrtnotificationdeniedtext">Notification permission is denied, go to app settings for enabling.</string>
     <!--End::Notification Permission-->
 </resources>

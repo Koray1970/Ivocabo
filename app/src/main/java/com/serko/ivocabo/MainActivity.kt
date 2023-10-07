@@ -1628,12 +1628,12 @@ fun TrackMyDevice(
     composeProgressStatus: MutableState<Boolean>,
     userviewModel: userViewModel = hiltViewModel(),
 ) {
-    composeProgressStatus.value = true
+
     val context = LocalContext.current.applicationContext
 
     val bluetoothPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
         BluetoothPermission(context)
-
+    val notificationPermission= NotificationPermission(context)
     if (!bluetoothPermissionStatus.first) {
         LaunchedEffect(Unit) {
             delay(300)
@@ -1641,141 +1641,164 @@ fun TrackMyDevice(
             bluetoothPermissionStatus.second.launchMultiplePermissionRequest()
         }
     } else {
-        val scope = rememberCoroutineScope()
-        var metricDistance by remember { mutableStateOf(context.getString(R.string.scanning)) }
-        var deviceDetail by remember { mutableStateOf(dummyDevice) }
-        var deviceIcon = R.drawable.t3_icon_32
-        bluetoothScanner = BluetoothScanner(context)
-
-        deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
-        if (deviceDetail?.devicetype != null)
-            if (deviceDetail?.devicetype == 2)
-                deviceIcon = R.drawable.e9_icon_32
-        var _macaddress = macaddress.uppercase()
-        bluetoothScanner.listOfMacaddress.add(_macaddress)
-        LaunchedEffect(Unit) {
-            delay(300)
-            bluetoothScanner.InitScan()
-            delay(320)
-            bluetoothScanner.StartScan()
-            delay(5200)
-            composeProgressStatus.value = false
-        }
-        val currentRssiState by bluetoothScanner.getCurrentRSSI().observeAsState()
-
-        val defaultMetricTextStyle=TextStyle(fontWeight = FontWeight.ExtraBold, fontSize = 48.sp, textAlign = TextAlign.Center)
-        val scanningMetricTextStyle=TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp, textAlign = TextAlign.Center, color = Color.Red)
-        var metricDistanceTextStyle by remember{ mutableStateOf<TextStyle>(defaultMetricTextStyle) }
-        if (currentRssiState == null) {
+        if(!notificationPermission.first){
             LaunchedEffect(Unit) {
-                metricDistanceTextStyle=scanningMetricTextStyle
-                metricDistance = context.getString(R.string.scanning)
-                delay(7000)
-                if(currentRssiState == null) {
-                    composeProgressStatus.value = false
-                    metricDistance = context.getString(R.string.devicecannotbereached)
-                    delay(5000)
-                }
-            }
-        } else {
-            metricDistanceTextStyle=defaultMetricTextStyle
-            if (composeProgressStatus.value)
+                delay(300)
                 composeProgressStatus.value = false
-            metricDistance =
-                helper.CalculateRSSIToMeter(currentRssiState).toString() + "mt"
-            Log.v("MainActivity", "${checkNotNull(currentRssiState)}")
+                notificationPermission.second.launchPermissionRequest()
+            }
         }
+        else {
+            composeProgressStatus.value = true
+            val scope = rememberCoroutineScope()
+            var metricDistance by remember { mutableStateOf(context.getString(R.string.scanning)) }
+            var deviceDetail by remember { mutableStateOf(dummyDevice) }
+            var deviceIcon = R.drawable.t3_icon_32
+            bluetoothScanner = BluetoothScanner(context)
 
-        Scaffold(
-            floatingActionButton = {
-                FloatingActionButton(
-                    containerColor = Color.Green,
-                    shape = CircleShape,
-                    onClick = {
-                        MainScope().launch {
-                            bluetoothScanner.StopScan()
-                            delay(300)
-                            navController.navigate("devicedashboard/${deviceDetail?.macaddress}")
-                        }
-                    },
-                    content = {
-                        Icon(
-                            painter = painterResource(id = R.drawable.baseline_arrow_back_24),
-                            contentDescription = ""
-                        )
+            deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
+            if (deviceDetail?.devicetype != null)
+                if (deviceDetail?.devicetype == 2)
+                    deviceIcon = R.drawable.e9_icon_32
+            var _macaddress = macaddress.uppercase()
+            bluetoothScanner.listOfMacaddress.add(_macaddress)
+            LaunchedEffect(Unit) {
+                delay(300)
+                bluetoothScanner.InitScan()
+                delay(320)
+                bluetoothScanner.StartScan()
+                delay(5200)
+                composeProgressStatus.value = false
+            }
+            val currentRssiState by bluetoothScanner.getCurrentRSSI().observeAsState()
+
+            val defaultMetricTextStyle = TextStyle(
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 48.sp,
+                textAlign = TextAlign.Center
+            )
+            val scanningMetricTextStyle = TextStyle(
+                fontWeight = FontWeight.Bold,
+                fontSize = 24.sp,
+                textAlign = TextAlign.Center,
+                color = Color.Red
+            )
+            var metricDistanceTextStyle by remember {
+                mutableStateOf<TextStyle>(
+                    defaultMetricTextStyle
+                )
+            }
+            if (currentRssiState == null) {
+                LaunchedEffect(Unit) {
+                    metricDistanceTextStyle = scanningMetricTextStyle
+                    metricDistance = context.getString(R.string.scanning)
+                    delay(7000)
+                    if (currentRssiState == null) {
+                        composeProgressStatus.value = false
+                        metricDistance = context.getString(R.string.devicecannotbereached)
+                        delay(5000)
                     }
-                )
-            }, floatingActionButtonPosition = FabPosition.Start
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(it)
-                    .fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = context.getString(R.string.trackmydevicetitle),
-                    style = TextStyle(
-                        fontWeight = FontWeight.ExtraBold,
-                        fontStyle = FontStyle.Normal,
-                        fontSize = 32.sp
-                    )
-                )
-                Spacer(modifier = Modifier.height(40.dp))
-                Image(
-                    painter = painterResource(id = deviceIcon),
-                    modifier = Modifier.size(120.dp),
-                    contentDescription = null
-                )
-                Spacer(modifier = Modifier.height(40.dp))
-                Column(modifier = Modifier.wrapContentWidth()) {
-                    Text(
-                        text = context.getString(R.string.devicename),
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    )
-                    Text(
-                        text = "${deviceDetail?.name}",
-                        style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = context.getString(R.string.macaddress),
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    )
-
-                    Text(
-                        text = "$_macaddress",
-                        style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
-                    )
                 }
+            } else {
+                metricDistanceTextStyle = defaultMetricTextStyle
+                if (composeProgressStatus.value)
+                    composeProgressStatus.value = false
+                metricDistance =
+                    helper.CalculateRSSIToMeter(currentRssiState).toString() + "mt"
+                Log.v("MainActivity", "${checkNotNull(currentRssiState)}")
+            }
+
+            Scaffold(
+                floatingActionButton = {
+                    FloatingActionButton(
+                        containerColor = Color.Green,
+                        shape = CircleShape,
+                        onClick = {
+                            MainScope().launch {
+                                bluetoothScanner.StopScan()
+                                delay(300)
+                                navController.navigate("devicedashboard/${deviceDetail?.macaddress}")
+                            }
+                        },
+                        content = {
+                            Icon(
+                                painter = painterResource(id = R.drawable.baseline_arrow_back_24),
+                                contentDescription = ""
+                            )
+                        }
+                    )
+                }, floatingActionButtonPosition = FabPosition.Start
+            ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(0.dp, 40.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .padding(it)
+                        .fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = context.getString(R.string.distancefromdevice),
-                        style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp)
-                    )
-                    Text(
-                        text = metricDistance,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(1.dp, Color.DarkGray),
-                        style = metricDistanceTextStyle
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = context.getString(R.string.distancefromdevicewarning),
+                        text = context.getString(R.string.trackmydevicetitle),
                         style = TextStyle(
-                            fontWeight = FontWeight.Light,
-                            fontSize = 12.sp,
-                            fontStyle = FontStyle.Italic,
-                            color = Color.LightGray
+                            fontWeight = FontWeight.ExtraBold,
+                            fontStyle = FontStyle.Normal,
+                            fontSize = 32.sp
                         )
                     )
+                    Spacer(modifier = Modifier.height(40.dp))
+                    Image(
+                        painter = painterResource(id = deviceIcon),
+                        modifier = Modifier.size(120.dp),
+                        contentDescription = null
+                    )
+                    Spacer(modifier = Modifier.height(40.dp))
+                    Column(modifier = Modifier.wrapContentWidth()) {
+                        Text(
+                            text = context.getString(R.string.devicename),
+                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        )
+                        Text(
+                            text = "${deviceDetail?.name}",
+                            style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = context.getString(R.string.macaddress),
+                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        )
+
+                        Text(
+                            text = "$_macaddress",
+                            style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
+                        )
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(0.dp, 40.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = context.getString(R.string.distancefromdevice),
+                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                        )
+                        Text(
+                            text = metricDistance,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, Color.DarkGray),
+                            style = metricDistanceTextStyle
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = context.getString(R.string.distancefromdevicewarning),
+                            style = TextStyle(
+                                fontWeight = FontWeight.Light,
+                                fontSize = 12.sp,
+                                fontStyle = FontStyle.Italic,
+                                color = Color.LightGray
+                            )
+                        )
+                    }
                 }
             }
         }
