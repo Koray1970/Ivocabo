@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.ActivityCompat
 import androidx.core.content.contentValuesOf
 import androidx.lifecycle.MutableLiveData
+import com.serko.ivocabo.R
 import com.serko.ivocabo.bluetooth.BluetoothScannerState.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.MainScope
@@ -58,6 +59,7 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
         private lateinit var bluetoothLeScanner: BluetoothLeScanner
         private lateinit var scanSetting: ScanSettings
         private var scanList = mutableListOf<ScanFilter>()
+
         private val scanCallback: ScanCallback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult?) {
                 super.onScanResult(callbackType, result)
@@ -91,19 +93,10 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
         return One.currentRssi
     }
 
-    fun InitScan() {
+    init {
         bluetoothAdapter = bluetoothManager.adapter
         if (bluetoothAdapter?.isEnabled == false) {
-            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            if (ActivityCompat.checkSelfPermission(
-                    context,
-                    bluetoothpermission
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Toast.makeText(context, "Enable bluetooth device!", Toast.LENGTH_LONG).show()
-                return
-            }
-            context.startActivity(enableBtIntent)
+            Toast.makeText(context, context.getString(R.string.enablebluetooth), Toast.LENGTH_LONG).show()
         } else {
             bluetoothLeScanner = bluetoothAdapter?.bluetoothLeScanner!!
 
@@ -126,17 +119,9 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
     }
 
 
+    @SuppressLint("MissingPermission")
     fun StartScan() {
         try {
-            if (ActivityCompat.checkSelfPermission(
-                    context,
-                    bluetoothpermission
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Toast.makeText(context, "Bluetooth scan permission is denied!", Toast.LENGTH_LONG)
-                    .show()
-                return
-            }
             MainScope().launch {
                 delay(1000)
                 bluetoothLeScanner?.startScan(scanList, scanSetting, scanCallback)

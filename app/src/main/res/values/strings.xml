@@ -35,6 +35,7 @@
     <string name="findmydevice">Find %s</string>
     <string name="missing">Missing</string>
     <!--End::Device Dashboard-->
+    <string name="enablebluetooth">Please enable GSM bluetooth!</string>
     <!--Start::Find My Device-->
     <string name="findmydevicetitle">Find My Device</string>
     <string name="scanning">Scanning...</string>

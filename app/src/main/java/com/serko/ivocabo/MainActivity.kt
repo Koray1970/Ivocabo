@@ -1490,8 +1490,7 @@ fun FindMyDevice(
         var _macaddress = macaddress.uppercase()
         bluetoothScanner.listOfMacaddress.add(_macaddress)
         LaunchedEffect(Unit) {
-            delay(300)
-            bluetoothScanner.InitScan()
+
             delay(320)
             bluetoothScanner.StartScan()
             delay(5200)
@@ -1499,22 +1498,31 @@ fun FindMyDevice(
         }
         val currentRssiState by bluetoothScanner.getCurrentRSSI().observeAsState()
 
-        val defaultMetricTextStyle=TextStyle(fontWeight = FontWeight.ExtraBold, fontSize = 48.sp, textAlign = TextAlign.Center)
-        val scanningMetricTextStyle=TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp, textAlign = TextAlign.Center, color = Color.Red)
-        var metricDistanceTextStyle by remember{ mutableStateOf<TextStyle>(defaultMetricTextStyle) }
+        val defaultMetricTextStyle = TextStyle(
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 48.sp,
+            textAlign = TextAlign.Center
+        )
+        val scanningMetricTextStyle = TextStyle(
+            fontWeight = FontWeight.Bold,
+            fontSize = 24.sp,
+            textAlign = TextAlign.Center,
+            color = Color.Red
+        )
+        var metricDistanceTextStyle by remember { mutableStateOf<TextStyle>(defaultMetricTextStyle) }
         if (currentRssiState == null) {
             LaunchedEffect(Unit) {
-                metricDistanceTextStyle=scanningMetricTextStyle
+                metricDistanceTextStyle = scanningMetricTextStyle
                 metricDistance = context.getString(R.string.scanning)
                 delay(7000)
-                if(currentRssiState == null) {
+                if (currentRssiState == null) {
                     composeProgressStatus.value = false
                     metricDistance = context.getString(R.string.devicecannotbereached)
                     delay(5000)
                 }
             }
         } else {
-            metricDistanceTextStyle=defaultMetricTextStyle
+            metricDistanceTextStyle = defaultMetricTextStyle
             if (composeProgressStatus.value)
                 composeProgressStatus.value = false
             metricDistance =
@@ -1633,7 +1641,7 @@ fun TrackMyDevice(
 
     val bluetoothPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
         BluetoothPermission(context)
-    val notificationPermission= NotificationPermission(context)
+    val notificationPermission = NotificationPermission(context)
     if (!bluetoothPermissionStatus.first) {
         LaunchedEffect(Unit) {
             delay(300)
@@ -1641,14 +1649,13 @@ fun TrackMyDevice(
             bluetoothPermissionStatus.second.launchMultiplePermissionRequest()
         }
     } else {
-        if(!notificationPermission.first){
+        if (!notificationPermission.first) {
             LaunchedEffect(Unit) {
                 delay(300)
                 composeProgressStatus.value = false
                 notificationPermission.second.launchPermissionRequest()
             }
-        }
-        else {
+        } else {
             composeProgressStatus.value = true
             val scope = rememberCoroutineScope()
             var metricDistance by remember { mutableStateOf(context.getString(R.string.scanning)) }
@@ -1663,8 +1670,6 @@ fun TrackMyDevice(
             var _macaddress = macaddress.uppercase()
             bluetoothScanner.listOfMacaddress.add(_macaddress)
             LaunchedEffect(Unit) {
-                delay(300)
-                bluetoothScanner.InitScan()
                 delay(320)
                 bluetoothScanner.StartScan()
                 delay(5200)
@@ -1694,6 +1699,10 @@ fun TrackMyDevice(
                     metricDistance = context.getString(R.string.scanning)
                     delay(7000)
                     if (currentRssiState == null) {
+                        val notify = AppNotification(
+                            context,
+                            NotifyItem(deviceDetail, "Title", "Summary", "Context")
+                        )
                         composeProgressStatus.value = false
                         metricDistance = context.getString(R.string.devicecannotbereached)
                         delay(5000)

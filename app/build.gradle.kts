@@ -84,6 +84,7 @@ dependencies {
     implementation("androidx.compose.runtime:runtime:1.6.0-alpha06")
     implementation("androidx.compose.runtime:runtime-livedata:1.6.0-alpha06")
     implementation("tech.utsmankece:osm-android-compose:0.0.5")
+    implementation("androidx.work:work-runtime-ktx:2.8.1")
     //implementation("androidx.compose.runtime:runtime-livedata:1.6.0-alpha06")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
