@@ -36,6 +36,11 @@
     <string name="missing">Missing</string>
     <!--End::Device Dashboard-->
     <string name="enablebluetooth">Please enable GSM bluetooth!</string>
+    <!--Start::Notification Details-->
+    <string name="ntf_title">Ivocabo Device Tracking Alert</string>
+    <string name="ntf_summary">%s is not reached!</string>
+    <string name="ntf_bigtext">The device named %s cannot be reached, its last lost location has been recorded.</string>
+    <!--End::Notification Details-->
     <!--Start::Find My Device-->
     <string name="findmydevicetitle">Find My Device</string>
     <string name="scanning">Scanning...</string>

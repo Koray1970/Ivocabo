@@ -117,6 +117,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequest
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.google.android.gms.maps.model.LatLng
@@ -152,6 +156,7 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.util.Locale
+import java.util.UUID
 
 //koko
 //koko@gmail.com
@@ -263,7 +268,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
+val gson = Gson()
 val helper = Helper()
 private lateinit var currentLocation: LatLng
 private val dummyDevice = Device(null, "", null, "", null, null, null, null, null, null)
@@ -707,7 +712,7 @@ fun SignIn(
             locationPermissionStatus.second.launchMultiplePermissionRequest()
         }
     } else {
-        val gson = Gson()
+
         val scope = rememberCoroutineScope()
         LaunchedEffect(Unit) {
             val countofUser = userviewModel.getCountofUser()
@@ -1218,12 +1223,18 @@ fun DeviceDashboard(
             geoPoint = GeoPoint(0.0, 0.0)
             zoom = 19.0 // optional, default is 5.0
         }
+
+        //track work
+        var ntfUUID by remember{ mutableStateOf<UUID>(UUID.randomUUID()) }
+        var notifybluetooth: OneTimeWorkRequest? = null
+
+
         SideEffect {
             deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
 
             //start:Map Properties
             val geopoint =
-                GeoPoint(deviceDetail?.latitude!!.toDouble(), deviceDetail.longitude!!.toDouble())
+                GeoPoint(deviceDetail.latitude!!.toDouble(), deviceDetail.longitude!!.toDouble())
             cameraState.geoPoint = geopoint
             mapMarkerState.geoPoint = geopoint
 
@@ -1379,6 +1390,19 @@ fun DeviceDashboard(
                                         checked = chkNotificationCheckState,
                                         onCheckedChange = { cc ->
                                             chkNotificationCheckState = cc
+                                            ntfUUID = UUID.randomUUID()
+                                            if (cc) {
+                                                TrackWorker.SCANNING_STATUS.value=true
+                                                notifybluetooth =
+                                                    OneTimeWorkRequestBuilder<TrackWorker>()
+                                                        .setId(ntfUUID)
+                                                        .setInputData(Data.Builder().putString("device", gson.toJson(deviceDetail)).build())
+                                                        .build()
+                                                WorkManager.getInstance(context).enqueue(notifybluetooth!!)
+                                            } else {
+                                                TrackWorker.SCANNING_STATUS.value=false
+                                                WorkManager.getInstance(context).cancelWorkById(ntfUUID)
+                                            }
                                         },
                                         thumbContent = if (chkNotificationCheckState) {
                                             {
@@ -1477,17 +1501,17 @@ fun FindMyDevice(
             bluetoothPermissionStatus.second.launchMultiplePermissionRequest()
         }
     } else {
-        val scope = rememberCoroutineScope()
+        //val scope = rememberCoroutineScope()
         var metricDistance by remember { mutableStateOf(context.getString(R.string.scanning)) }
         var deviceDetail by remember { mutableStateOf(dummyDevice) }
         var deviceIcon = R.drawable.t3_icon_32
         bluetoothScanner = BluetoothScanner(context)
 
         deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
-        if (deviceDetail?.devicetype != null)
-            if (deviceDetail?.devicetype == 2)
+        if (deviceDetail.devicetype != null)
+            if (deviceDetail.devicetype == 2)
                 deviceIcon = R.drawable.e9_icon_32
-        var _macaddress = macaddress.uppercase()
+        val _macaddress = macaddress.uppercase()
         bluetoothScanner.listOfMacaddress.add(_macaddress)
         LaunchedEffect(Unit) {
 
@@ -1539,7 +1563,7 @@ fun FindMyDevice(
                         MainScope().launch {
                             bluetoothScanner.StopScan()
                             delay(300)
-                            navController.navigate("devicedashboard/${deviceDetail?.macaddress}")
+                            navController.navigate("devicedashboard/${deviceDetail.macaddress}")
                         }
                     },
                     content = {
@@ -1579,7 +1603,7 @@ fun FindMyDevice(
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     )
                     Text(
-                        text = "${deviceDetail?.name}",
+                        text = deviceDetail.name,
                         style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1589,7 +1613,7 @@ fun FindMyDevice(
                     )
 
                     Text(
-                        text = "$_macaddress",
+                        text = _macaddress,
                         style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
                     )
                 }
@@ -1657,17 +1681,17 @@ fun TrackMyDevice(
             }
         } else {
             composeProgressStatus.value = true
-            val scope = rememberCoroutineScope()
+            //val scope = rememberCoroutineScope()
             var metricDistance by remember { mutableStateOf(context.getString(R.string.scanning)) }
             var deviceDetail by remember { mutableStateOf(dummyDevice) }
             var deviceIcon = R.drawable.t3_icon_32
             bluetoothScanner = BluetoothScanner(context)
 
             deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
-            if (deviceDetail?.devicetype != null)
-                if (deviceDetail?.devicetype == 2)
+            if (deviceDetail.devicetype != null)
+                if (deviceDetail.devicetype == 2)
                     deviceIcon = R.drawable.e9_icon_32
-            var _macaddress = macaddress.uppercase()
+            val _macaddress = macaddress.uppercase()
             bluetoothScanner.listOfMacaddress.add(_macaddress)
             LaunchedEffect(Unit) {
                 delay(320)
@@ -1726,7 +1750,7 @@ fun TrackMyDevice(
                             MainScope().launch {
                                 bluetoothScanner.StopScan()
                                 delay(300)
-                                navController.navigate("devicedashboard/${deviceDetail?.macaddress}")
+                                navController.navigate("devicedashboard/${deviceDetail.macaddress}")
                             }
                         },
                         content = {
@@ -1766,7 +1790,7 @@ fun TrackMyDevice(
                             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         )
                         Text(
-                            text = "${deviceDetail?.name}",
+                            text = deviceDetail.name,
                             style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
@@ -1776,7 +1800,7 @@ fun TrackMyDevice(
                         )
 
                         Text(
-                            text = "$_macaddress",
+                            text = _macaddress,
                             style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
                         )
                     }

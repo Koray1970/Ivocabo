@@ -23,17 +23,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.ActivityCompat
 import androidx.core.content.contentValuesOf
 import androidx.lifecycle.MutableLiveData
+import com.google.gson.Gson
 import com.serko.ivocabo.R
 import com.serko.ivocabo.bluetooth.BluetoothScannerState.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
+import java.util.Locale
 import javax.inject.Inject
 
 
@@ -41,6 +44,7 @@ enum class BluetoothScannerState { INITIATE, START_SCAN, STOP_SCAN }
 
 
 class BluetoothScanner @Inject constructor(@ApplicationContext private val context: Context) {
+
     var evenState = MutableLiveData<BluetoothScannerState>(INITIATE)
     var listOfMacaddress = mutableListOf<String>()
     private val bluetoothManager: BluetoothManager =
@@ -54,8 +58,9 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
         android.Manifest.permission.BLUETOOTH_ADMIN
 
     companion object One {
+        private val gson= Gson()
         private val TAG = BluetoothScanner::class.java.simpleName
-        var currentRssi=MutableLiveData<Int?>()
+        var currentRssi = MutableLiveData<Int?>()
         private lateinit var bluetoothLeScanner: BluetoothLeScanner
         private lateinit var scanSetting: ScanSettings
         private var scanList = mutableListOf<ScanFilter>()
@@ -63,19 +68,25 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
         private val scanCallback: ScanCallback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult?) {
                 super.onScanResult(callbackType, result)
-                currentRssi.postValue (result?.rssi)
+                currentRssi.postValue(result?.rssi)
                 //Log.v(TAG, "RSSI : ${result?.rssi}")
             }
 
+            @SuppressLint("MissingPermission")
             override fun onBatchScanResults(results: MutableList<ScanResult>?) {
                 super.onBatchScanResults(results)
+
+                if(results.compare)
+                    Log.v(TAG, "Device in list : true")
+
                 if (!results.isNullOrEmpty()) {
                     var totalRSSI = results!!.sumOf { a -> a.rssi } / results!!.size
-                    //Log.v(TAG, "Avarage RSSI : $totalRSSI")
+                    Log.v(TAG, "Avarage RSSI : $totalRSSI")
                     currentRssi.postValue(totalRSSI)
-                }
-                else{
+
+                } else {
                     currentRssi.postValue(null)
+                    Log.v(TAG, "Avarage RSSI : is NULL")
                 }
                 /* results?.forEach {
                      Log.v(TAG, "Batch RSSI : ${it.rssi}")
@@ -93,16 +104,26 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
         return One.currentRssi
     }
 
+    private var flwRSSI = MutableStateFlow<Int?>(0)
+    fun getFlowCurrentRSSI(): MutableStateFlow<Int?> {
+        MainScope().launch {
+            flwRSSI.emit(One.currentRssi.value)
+        }
+        return flwRSSI
+    }
+
     init {
         bluetoothAdapter = bluetoothManager.adapter
         if (bluetoothAdapter?.isEnabled == false) {
-            Toast.makeText(context, context.getString(R.string.enablebluetooth), Toast.LENGTH_LONG).show()
+            Toast.makeText(context, context.getString(R.string.enablebluetooth), Toast.LENGTH_LONG)
+                .show()
         } else {
             bluetoothLeScanner = bluetoothAdapter?.bluetoothLeScanner!!
 
             scanSetting = ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
                 .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+                .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
                 .setReportDelay(3000)
                 //.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
                 .build()
@@ -110,7 +131,7 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
             listOfMacaddress?.forEach {
                 scanList.add(
                     ScanFilter.Builder()
-                        .setDeviceAddress(it)
+                        .setDeviceAddress(it.uppercase(Locale.ROOT))
                         .build()
                 )
             }

@@ -15,6 +15,7 @@
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true"/>
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <application
         android:name=".IvocaboApplication"
         android:allowBackup="true"
@@ -45,6 +46,10 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.Ivocabo">
         </activity>
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="connectedDevice|location"
+            tools:node="merge" />
     </application>
 
 </manifest>
