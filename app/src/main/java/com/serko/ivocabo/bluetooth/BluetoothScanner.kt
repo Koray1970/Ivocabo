@@ -94,45 +94,101 @@ class BluetoothScanner @Inject constructor(
             @SuppressLint("MissingPermission")
             override fun onBatchScanResults(results: MutableList<ScanResult>?) {
                 super.onBatchScanResults(results)
+
+                Log.v(TAG, "ScanResults : ${gson.toJson(results)}")
                 var localScanResults = mutableListOf<BluetoothScannerResult>()
-                if (bleScanResultList.value?.size!! > 0) {
-                    localScanResults = bleScanResultList.value!!
-                }
+                if (!bleScanResultList.value.isNullOrEmpty())
+                    if (bleScanResultList.value?.size!! > 0) {
+                        localScanResults = bleScanResultList.value!!
+                    }
                 val _results = results?.distinctBy { a -> a.device.address }
                 _listOfMacaddress.forEach { mm ->
                     var bsr = BluetoothScannerResult(mm, null, null, null)
+
+                    var lastresult: ScanResult? = null
+
+                    if (results != null)
+                        if (results.isNotEmpty())
+                            lastresult = results?.last { a -> a.device.address == mm }
+
                     if (localScanResults.size > 0) {
                         if (localScanResults.any { a -> a.macaddress == mm }) {
-                            bsr = localScanResults.last { a -> a.macaddress == mm }
-                            localScanResults.removeIf { a -> a.macaddress == mm }
-                        }
-                    }
-                    if (results?.isNotEmpty() == true) {
-                        var lastresult = results?.last { a -> a.device.address == mm }
-                        if (lastresult != null) {
-                            bsr.rssi = lastresult.rssi
-                            bsr.callbackStatus = BluetoothScannerCallbackStatus.CONNECTING
-                            if (bsr.countOfDisconnected != null) {
-                                bsr.countOfDisconnected = null
+                            var indx = localScanResults.indexOfLast { a -> a.macaddress == mm }
+
+                            if (lastresult != null) {
+                                localScanResults[indx].rssi = lastresult.rssi
+                                if (localScanResults[indx].countOfDisconnected != null)
+                                    localScanResults[indx].countOfDisconnected = null
+                                localScanResults[indx].callbackStatus =
+                                    BluetoothScannerCallbackStatus.CONNECTING
+                            } else {
+                                if(localScanResults[indx].countOfDisconnected ==null)
+                                    localScanResults[indx].countOfDisconnected =0
+                                localScanResults[indx].countOfDisconnected = localScanResults[indx].countOfDisconnected!! + 1
+                                if (localScanResults[indx].countOfDisconnected!! > 10) {
+                                    localScanResults[indx].rssi = null
+                                    localScanResults[indx].callbackStatus =
+                                        BluetoothScannerCallbackStatus.CONNECTION_LOST
+                                }
                             }
                         } else {
+                            if (results?.isNotEmpty() == true) {
+                                if (lastresult != null) {
+                                    bsr.rssi = lastresult.rssi
+                                    bsr.callbackStatus = BluetoothScannerCallbackStatus.CONNECTING
+                                    if (bsr.countOfDisconnected != null) {
+                                        bsr.countOfDisconnected = null
+                                    }
+                                } else {
+                                    bsr.countOfDisconnected = bsr.countOfDisconnected!! + 1
+                                    if (bsr.countOfDisconnected!! > 10) {
+                                        bsr.rssi = null
+                                        bsr.callbackStatus =
+                                            BluetoothScannerCallbackStatus.CONNECTION_LOST
+                                    }
+                                }
+                            } else {
+                                if (bsr.countOfDisconnected == null) bsr.countOfDisconnected = 0
+                                bsr.countOfDisconnected = bsr.countOfDisconnected!! + 1
+                                if (bsr.countOfDisconnected!! > 10) {
+                                    bsr.rssi = null
+                                    bsr.callbackStatus =
+                                        BluetoothScannerCallbackStatus.CONNECTION_LOST
+                                }
+                            }
+
+                            localScanResults.add(bsr)
+                        }
+                    } else {
+                        if (results?.isNotEmpty() == true) {
+                            if (lastresult != null) {
+                                bsr.rssi = lastresult.rssi
+                                bsr.callbackStatus = BluetoothScannerCallbackStatus.CONNECTING
+                                if (bsr.countOfDisconnected != null) {
+                                    bsr.countOfDisconnected = null
+                                }
+                            } else {
+                                bsr.countOfDisconnected = bsr.countOfDisconnected!! + 1
+                                if (bsr.countOfDisconnected!! > 10) {
+                                    bsr.rssi = null
+                                    bsr.callbackStatus =
+                                        BluetoothScannerCallbackStatus.CONNECTION_LOST
+                                }
+                            }
+                        } else {
+                            if (bsr.countOfDisconnected == null) bsr.countOfDisconnected = 0
                             bsr.countOfDisconnected = bsr.countOfDisconnected!! + 1
                             if (bsr.countOfDisconnected!! > 10) {
                                 bsr.rssi = null
                                 bsr.callbackStatus = BluetoothScannerCallbackStatus.CONNECTION_LOST
                             }
                         }
-                    } else {
-                        if (bsr.countOfDisconnected == null) bsr.countOfDisconnected = 0
-                        bsr.countOfDisconnected = bsr.countOfDisconnected!! + 1
-                        if (bsr.countOfDisconnected!! > 10) {
-                            bsr.rssi = null
-                            bsr.callbackStatus = BluetoothScannerCallbackStatus.CONNECTION_LOST
-                        }
+
+                        localScanResults.add(bsr)
                     }
-                    localScanResults.add(bsr)
                 }
                 bleScanResultList.postValue(localScanResults)
+                Log.v(TAG, "bleScanResultList : ${gson.toJson(bleScanResultList.value)}")
             }
 
             override fun onScanFailed(errorCode: Int) {

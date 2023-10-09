@@ -24,7 +24,7 @@ class IvocaboApplication : Application() {
             val channel = NotificationChannel(
                 "ivoNotification",
                 "ivocabo",
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_HIGH
             )
             channel.setSound(soundUri, audioAttributes)
             val notificationManager =
