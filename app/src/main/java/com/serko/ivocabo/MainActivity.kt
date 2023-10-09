@@ -127,6 +127,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
 import com.serko.ivocabo.api.IApiService
 import com.serko.ivocabo.bluetooth.BluetoothScanner
+import com.serko.ivocabo.bluetooth.BluetoothScannerCallbackStatus
 import com.serko.ivocabo.data.Device
 import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
@@ -1509,6 +1510,7 @@ fun FindMyDevice(
             bluetoothPermissionStatus.second.launchMultiplePermissionRequest()
         }
     } else {
+        composeProgressStatus.value = true
         //val scope = rememberCoroutineScope()
         var metricDistance by remember { mutableStateOf(context.getString(R.string.scanning)) }
         var deviceDetail by remember { mutableStateOf(dummyDevice) }
@@ -1524,13 +1526,12 @@ fun FindMyDevice(
         listofMacaddress.add(_macaddress.uppercase(Locale.ROOT))
 
         bluetoothScanner = BluetoothScanner(context, listofMacaddress)
+
         LaunchedEffect(Unit) {
             delay(320)
             bluetoothScanner.StartScan()
-            delay(5200)
-            composeProgressStatus.value = false
         }
-        val currentRssiState by bluetoothScanner.getCurrentRSSI().observeAsState()
+        val scanResults by bluetoothScanner.getBluetoothScannerResults().observeAsState()
 
         val defaultMetricTextStyle = TextStyle(
             fontWeight = FontWeight.ExtraBold,
@@ -1543,25 +1544,34 @@ fun FindMyDevice(
             textAlign = TextAlign.Center,
             color = Color.Red
         )
-        var metricDistanceTextStyle by remember { mutableStateOf<TextStyle>(defaultMetricTextStyle) }
-        if (currentRssiState == null) {
-            LaunchedEffect(Unit) {
+        var metricDistanceTextStyle by remember {
+            mutableStateOf<TextStyle>(
+                defaultMetricTextStyle
+            )
+        }
+        var getCurrentDeviceResult= scanResults!!.last { a->a.macaddress== _macaddress}
+        when (getCurrentDeviceResult.callbackStatus) {
+            BluetoothScannerCallbackStatus.CONNECTION_LOST-> {
+                val notify = AppNotification(
+                    context,
+                    NotifyItem(deviceDetail, "Title", "Summary", "Context")
+                )
+                if (composeProgressStatus.value)
+                    composeProgressStatus.value = false
+                metricDistance = context.getString(R.string.devicecannotbereached)
+            }
+            BluetoothScannerCallbackStatus.SCANNING->{
+                metricDistanceTextStyle = defaultMetricTextStyle
+                if (composeProgressStatus.value)
+                    composeProgressStatus.value = false
+                metricDistance =
+                    helper.CalculateRSSIToMeter(getCurrentDeviceResult.rssi).toString() + "mt"
+            }
+            else -> {
+                composeProgressStatus.value = true
                 metricDistanceTextStyle = scanningMetricTextStyle
                 metricDistance = context.getString(R.string.scanning)
-                delay(7000)
-                if (currentRssiState == null) {
-                    composeProgressStatus.value = false
-                    metricDistance = context.getString(R.string.devicecannotbereached)
-                    delay(5000)
-                }
             }
-        } else {
-            metricDistanceTextStyle = defaultMetricTextStyle
-            if (composeProgressStatus.value)
-                composeProgressStatus.value = false
-            metricDistance =
-                helper.CalculateRSSIToMeter(currentRssiState).toString() + "mt"
-            Log.v("MainActivity", "${checkNotNull(currentRssiState)}")
         }
 
         Scaffold(
@@ -1705,16 +1715,6 @@ fun TrackMyDevice(
             val listofMacaddress = mutableListOf<String>()
             listofMacaddress.add(_macaddress.uppercase(Locale.ROOT))
 
-            bluetoothScanner = BluetoothScanner(context, listofMacaddress)
-
-            LaunchedEffect(Unit) {
-                delay(320)
-                bluetoothScanner.StartScan()
-                delay(5200)
-                composeProgressStatus.value = false
-            }
-            val currentRssiState by bluetoothScanner.getCurrentRSSI().observeAsState()
-
             val defaultMetricTextStyle = TextStyle(
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 48.sp,
@@ -1731,34 +1731,50 @@ fun TrackMyDevice(
                     defaultMetricTextStyle
                 )
             }
-            Log.v("MainActivity", "currentRssiState : $currentRssiState")
-            var counterofNullRSSI=0
-            if (currentRssiState == null) {
-                counterofNullRSSI++
-                if(counterofNullRSSI>20) {
-                    LaunchedEffect(Unit) {
+
+
+            bluetoothScanner = BluetoothScanner(context, listofMacaddress)
+
+            LaunchedEffect(Unit) {
+                delay(320)
+                bluetoothScanner.StartScan()
+            }
+            val scanResults by bluetoothScanner.getBluetoothScannerResults().observeAsState()
+
+
+            if(scanResults?.isNotEmpty()==true) {
+                var getCurrentDeviceResult = scanResults!!.last { a -> a.macaddress == _macaddress }
+                when (getCurrentDeviceResult.callbackStatus) {
+                    BluetoothScannerCallbackStatus.CONNECTION_LOST -> {
+                        val notify = AppNotification(
+                            context,
+                            NotifyItem(deviceDetail, "Title", "Summary", "Context")
+                        )
+                        if (composeProgressStatus.value)
+                            composeProgressStatus.value = false
+                        metricDistance = context.getString(R.string.devicecannotbereached)
+                    }
+
+                    BluetoothScannerCallbackStatus.SCANNING -> {
+                        metricDistanceTextStyle = defaultMetricTextStyle
+                        if (composeProgressStatus.value)
+                            composeProgressStatus.value = false
+                        metricDistance =
+                            helper.CalculateRSSIToMeter(getCurrentDeviceResult.rssi)
+                                .toString() + "mt"
+                    }
+
+                    else -> {
+                        composeProgressStatus.value = true
                         metricDistanceTextStyle = scanningMetricTextStyle
                         metricDistance = context.getString(R.string.scanning)
-                        delay(7000)
-                        if (currentRssiState == null) {
-                            val notify = AppNotification(
-                                context,
-                                NotifyItem(deviceDetail, "Title", "Summary", "Context")
-                            )
-                            composeProgressStatus.value = false
-                            metricDistance = context.getString(R.string.devicecannotbereached)
-                            delay(5000)
-                        }
                     }
-                    counterofNullRSSI=0
                 }
-            } else {
-                metricDistanceTextStyle = defaultMetricTextStyle
-                if (composeProgressStatus.value)
-                    composeProgressStatus.value = false
-                metricDistance =
-                    helper.CalculateRSSIToMeter(currentRssiState).toString() + "mt"
-                //Log.v("MainActivity", "${checkNotNull(currentRssiState)}")
+            }
+            else{
+                composeProgressStatus.value = true
+                metricDistanceTextStyle = scanningMetricTextStyle
+                metricDistance = context.getString(R.string.scanning)
             }
 
             Scaffold(
