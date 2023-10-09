@@ -268,6 +268,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
 val gson = Gson()
 val helper = Helper()
 private lateinit var currentLocation: LatLng
@@ -1225,7 +1226,7 @@ fun DeviceDashboard(
         }
 
         //track work
-        var ntfUUID by remember{ mutableStateOf<UUID>(UUID.randomUUID()) }
+        var ntfUUID by remember { mutableStateOf<UUID>(UUID.randomUUID()) }
         var notifybluetooth: OneTimeWorkRequest? = null
 
 
@@ -1392,16 +1393,23 @@ fun DeviceDashboard(
                                             chkNotificationCheckState = cc
                                             ntfUUID = UUID.randomUUID()
                                             if (cc) {
-                                                TrackWorker.SCANNING_STATUS.value=true
+                                                TrackWorker.SCANNING_STATUS.value = true
                                                 notifybluetooth =
                                                     OneTimeWorkRequestBuilder<TrackWorker>()
                                                         .setId(ntfUUID)
-                                                        .setInputData(Data.Builder().putString("device", gson.toJson(deviceDetail)).build())
+                                                        .setInputData(
+                                                            Data.Builder().putString(
+                                                                "device",
+                                                                gson.toJson(deviceDetail)
+                                                            ).build()
+                                                        )
                                                         .build()
-                                                WorkManager.getInstance(context).enqueue(notifybluetooth!!)
+                                                WorkManager.getInstance(context)
+                                                    .enqueue(notifybluetooth!!)
                                             } else {
-                                                TrackWorker.SCANNING_STATUS.value=false
-                                                WorkManager.getInstance(context).cancelWorkById(ntfUUID)
+                                                TrackWorker.SCANNING_STATUS.value = false
+                                                WorkManager.getInstance(context)
+                                                    .cancelWorkById(ntfUUID)
                                             }
                                         },
                                         thumbContent = if (chkNotificationCheckState) {
@@ -1505,16 +1513,18 @@ fun FindMyDevice(
         var metricDistance by remember { mutableStateOf(context.getString(R.string.scanning)) }
         var deviceDetail by remember { mutableStateOf(dummyDevice) }
         var deviceIcon = R.drawable.t3_icon_32
-        bluetoothScanner = BluetoothScanner(context)
+
 
         deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
         if (deviceDetail.devicetype != null)
             if (deviceDetail.devicetype == 2)
                 deviceIcon = R.drawable.e9_icon_32
         val _macaddress = macaddress.uppercase()
-        bluetoothScanner.listOfMacaddress.add(_macaddress)
-        LaunchedEffect(Unit) {
+        val listofMacaddress = mutableListOf<String>()
+        listofMacaddress.add(_macaddress.uppercase(Locale.ROOT))
 
+        bluetoothScanner = BluetoothScanner(context, listofMacaddress)
+        LaunchedEffect(Unit) {
             delay(320)
             bluetoothScanner.StartScan()
             delay(5200)
@@ -1685,14 +1695,18 @@ fun TrackMyDevice(
             var metricDistance by remember { mutableStateOf(context.getString(R.string.scanning)) }
             var deviceDetail by remember { mutableStateOf(dummyDevice) }
             var deviceIcon = R.drawable.t3_icon_32
-            bluetoothScanner = BluetoothScanner(context)
+
 
             deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
             if (deviceDetail.devicetype != null)
                 if (deviceDetail.devicetype == 2)
                     deviceIcon = R.drawable.e9_icon_32
             val _macaddress = macaddress.uppercase()
-            bluetoothScanner.listOfMacaddress.add(_macaddress)
+            val listofMacaddress = mutableListOf<String>()
+            listofMacaddress.add(_macaddress.uppercase(Locale.ROOT))
+
+            bluetoothScanner = BluetoothScanner(context, listofMacaddress)
+
             LaunchedEffect(Unit) {
                 delay(320)
                 bluetoothScanner.StartScan()
@@ -1717,20 +1731,26 @@ fun TrackMyDevice(
                     defaultMetricTextStyle
                 )
             }
+            Log.v("MainActivity", "currentRssiState : $currentRssiState")
+            var counterofNullRSSI=0
             if (currentRssiState == null) {
-                LaunchedEffect(Unit) {
-                    metricDistanceTextStyle = scanningMetricTextStyle
-                    metricDistance = context.getString(R.string.scanning)
-                    delay(7000)
-                    if (currentRssiState == null) {
-                        val notify = AppNotification(
-                            context,
-                            NotifyItem(deviceDetail, "Title", "Summary", "Context")
-                        )
-                        composeProgressStatus.value = false
-                        metricDistance = context.getString(R.string.devicecannotbereached)
-                        delay(5000)
+                counterofNullRSSI++
+                if(counterofNullRSSI>20) {
+                    LaunchedEffect(Unit) {
+                        metricDistanceTextStyle = scanningMetricTextStyle
+                        metricDistance = context.getString(R.string.scanning)
+                        delay(7000)
+                        if (currentRssiState == null) {
+                            val notify = AppNotification(
+                                context,
+                                NotifyItem(deviceDetail, "Title", "Summary", "Context")
+                            )
+                            composeProgressStatus.value = false
+                            metricDistance = context.getString(R.string.devicecannotbereached)
+                            delay(5000)
+                        }
                     }
+                    counterofNullRSSI=0
                 }
             } else {
                 metricDistanceTextStyle = defaultMetricTextStyle
@@ -1738,7 +1758,7 @@ fun TrackMyDevice(
                     composeProgressStatus.value = false
                 metricDistance =
                     helper.CalculateRSSIToMeter(currentRssiState).toString() + "mt"
-                Log.v("MainActivity", "${checkNotNull(currentRssiState)}")
+                //Log.v("MainActivity", "${checkNotNull(currentRssiState)}")
             }
 
             Scaffold(

@@ -38,10 +38,14 @@ class TrackWorker @Inject constructor(context: Context, parameters: WorkerParame
     private var bluetoothScanner: BluetoothScanner? = null
     override suspend fun doWork(): Result {
 
-        bluetoothScanner = BluetoothScanner(_context)
         inputData.getString("device")?.let { it ->
             device = gson.fromJson(it, Device::class.java)
-            bluetoothScanner?.listOfMacaddress?.add(device!!.macaddress.uppercase(Locale.ROOT))
+
+            val listofMacaddress = mutableListOf<String>()
+            listofMacaddress.add(device!!.macaddress.uppercase(Locale.ROOT))
+
+            bluetoothScanner = BluetoothScanner(_context, listofMacaddress)
+
 
             Log.v("TrackWorker", "Mac  : ${device!!.macaddress.uppercase(Locale.ROOT)}")
             setForeground(createForegroundInfo(device!!))

@@ -43,10 +43,14 @@ import javax.inject.Inject
 enum class BluetoothScannerState { INITIATE, START_SCAN, STOP_SCAN }
 
 
-class BluetoothScanner @Inject constructor(@ApplicationContext private val context: Context) {
-
+class BluetoothScanner @Inject constructor(
+    @ApplicationContext private val context: Context,
+    listOfMacaddress: MutableList<String>,
+) {
+    private val _listOfMacaddress = listOfMacaddress
     var evenState = MutableLiveData<BluetoothScannerState>(INITIATE)
-    var listOfMacaddress = mutableListOf<String>()
+
+    //var listOfMacaddress = mutableListOf<String>()
     private val bluetoothManager: BluetoothManager =
         context.getSystemService(BluetoothManager::class.java)
     private var bluetoothAdapter: BluetoothAdapter? = null
@@ -58,7 +62,7 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
         android.Manifest.permission.BLUETOOTH_ADMIN
 
     companion object One {
-        private val gson= Gson()
+        private val gson = Gson()
         private val TAG = BluetoothScanner::class.java.simpleName
         var currentRssi = MutableLiveData<Int?>()
         private lateinit var bluetoothLeScanner: BluetoothLeScanner
@@ -75,9 +79,20 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
             @SuppressLint("MissingPermission")
             override fun onBatchScanResults(results: MutableList<ScanResult>?) {
                 super.onBatchScanResults(results)
+                /*if (scanList.distinct().isNotEmpty()) {
+                    val filterResult =
+                        results?.filter { a -> scanList.any { g -> g.deviceAddress == a.device.address } == true }
+                    var getdevv = emptyArray<String>()
+                    var ii = 0
+                    scanList.forEach {
+                        getdevv.set(ii, it.deviceAddress!!)
+                        ii++
+                    }
+                }*/
+                //if(filterResult?.isNotEmpty()==true)
 
-                if(results.compare)
-                    Log.v(TAG, "Device in list : true")
+                Log.v(TAG, "scanList :  ${gson.toJson(scanList)}")
+                Log.v(TAG, "results :  ${gson.toJson(results)}")
 
                 if (!results.isNullOrEmpty()) {
                     var totalRSSI = results!!.sumOf { a -> a.rssi } / results!!.size
@@ -85,7 +100,7 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
                     currentRssi.postValue(totalRSSI)
 
                 } else {
-                    currentRssi.postValue(null)
+                    currentRssi.postValue(0)
                     Log.v(TAG, "Avarage RSSI : is NULL")
                 }
                 /* results?.forEach {
@@ -100,6 +115,7 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
         }
     }
 
+
     fun getCurrentRSSI(): MutableLiveData<Int?> {
         return One.currentRssi
     }
@@ -112,7 +128,8 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
         return flwRSSI
     }
 
-    init {
+    @SuppressLint("MissingPermission")
+    fun StartScan() {
         bluetoothAdapter = bluetoothManager.adapter
         if (bluetoothAdapter?.isEnabled == false) {
             Toast.makeText(context, context.getString(R.string.enablebluetooth), Toast.LENGTH_LONG)
@@ -128,20 +145,35 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
                 //.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
                 .build()
 
-            listOfMacaddress?.forEach {
-                scanList.add(
-                    ScanFilter.Builder()
-                        .setDeviceAddress(it.uppercase(Locale.ROOT))
-                        .build()
-                )
+            if (_listOfMacaddress.isNotEmpty()) {
+                Log.v(TAG, "listOfMacaddress :  ${gson.toJson(_listOfMacaddress)}")
+                if (scanList.isNotEmpty()) {
+                    if (!scanList.any { a -> _listOfMacaddress.any { g -> g == a.deviceAddress } }) {
+                        _listOfMacaddress?.forEach { mac ->
+                            if (!scanList.any { a -> a.deviceAddress == mac }) {
+                                scanList.add(
+                                    ScanFilter.Builder()
+                                        .setDeviceAddress(mac.uppercase(Locale.ROOT))
+                                        .build()
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    _listOfMacaddress?.forEach {
+                        scanList.add(
+                            ScanFilter.Builder()
+                                .setDeviceAddress(it.uppercase(Locale.ROOT))
+                                .build()
+                        )
+                    }
+                }
+                evenState.postValue(START_SCAN)
             }
-            evenState.postValue(START_SCAN)
         }
-    }
 
 
-    @SuppressLint("MissingPermission")
-    fun StartScan() {
+
         try {
             MainScope().launch {
                 delay(1000)
@@ -160,7 +192,11 @@ class BluetoothScanner @Inject constructor(@ApplicationContext private val conte
                     bluetoothpermission
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
-                Toast.makeText(context, "Bluetooth scan permission is denied!", Toast.LENGTH_LONG)
+                Toast.makeText(
+                    context,
+                    "Bluetooth scan permission is denied!",
+                    Toast.LENGTH_LONG
+                )
                     .show()
                 return
             }
