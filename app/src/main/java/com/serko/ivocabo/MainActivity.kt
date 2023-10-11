@@ -94,6 +94,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
@@ -133,6 +134,7 @@ import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
 import com.serko.ivocabo.data.User
 import com.serko.ivocabo.data.userViewModel
+import com.serko.ivocabo.location.GetCurrentLocation
 import com.serko.ivocabo.location.LOCATIONSTATUS
 import com.serko.ivocabo.location.LocationViewModel
 import com.serko.ivocabo.remote.membership.EventResult
@@ -300,7 +302,7 @@ fun ComposeProgress(dialogshow: MutableState<Boolean>) {
 
 val formTitle =
     TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-
+fun DoNothing(){}
 @SuppressLint("CoroutineCreationDuringComposition")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -312,6 +314,20 @@ fun Dashboard(
 ) {
     composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
+
+    val getloooc=GetCurrentLocation(context,LocalLifecycleOwner.current)
+    getloooc.getCurrentLocation().observe(LocalLifecycleOwner.current) {
+        when (it) {
+            null -> {
+                DoNothing()
+            }
+
+            else -> {
+                Log.v("MainActivity", "Location: ${gson.toJson(it)}")
+            }
+        }
+    }
+
     val locationPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
         LocationPermission(context)
     if (!locationPermissionStatus.first) {
@@ -357,10 +373,10 @@ fun Dashboard(
             //start:Map Properties
             scope.launch {
                 locationViewModel.latlang.cancellable().collect {
-                    Log.v(
+                    /*Log.v(
                         "Location Detail",
                         "Status: ${it.statestatus}"
-                    )
+                    )*/
                     when (it.statestatus) {
                         LOCATIONSTATUS.Running -> {
                             currentLocation = it.latlng
@@ -377,10 +393,10 @@ fun Dashboard(
                                 .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
 
 
-                            Log.v(
+                           /*Log.v(
                                 "Location Detail",
-                                "Location: ${currentLocation.latitude},${currentLocation.longitude} "
-                            )
+                                "Location: ${currentLocation.latitude},${currentLocation.longitude}"
+                            )*/
                         }
 
                         LOCATIONSTATUS.Has_Exception -> Log.v("Location Detail", "has exception")

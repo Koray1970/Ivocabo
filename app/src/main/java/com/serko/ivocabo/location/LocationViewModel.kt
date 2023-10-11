@@ -83,7 +83,7 @@ class LocationRepository @Inject constructor(@ApplicationContext private val con
                     evresult.statestatus = LOCATIONSTATUS.Has_Exception
                     send(evresult)
                 }
-                Log.v("Location Detail", "Exception :${e.message}")
+                //Log.v("Location Detail", "Exception :${e.message}")
             }
             awaitCancellation()
             awaitClose {

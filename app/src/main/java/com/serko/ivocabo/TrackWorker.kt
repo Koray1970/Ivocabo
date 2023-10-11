@@ -1,17 +1,10 @@
 package com.serko.ivocabo
 
-import android.Manifest.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE
 import android.annotation.SuppressLint
 import android.app.NotificationManager
 import android.content.Context
-import android.util.Log
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.MutableLiveData
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
@@ -22,11 +15,7 @@ import com.serko.ivocabo.bluetooth.BluetoothScanner
 import com.serko.ivocabo.bluetooth.BluetoothScannerCallbackStatus
 import com.serko.ivocabo.bluetooth.BluetoothScannerResult
 import com.serko.ivocabo.data.Device
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
@@ -42,7 +31,6 @@ class TrackWorker @Inject constructor(context: Context, parameters: WorkerParame
 
     private var bluetoothScanner: BluetoothScanner? = null
     override suspend fun doWork(): Result {
-
         inputData.getString("device")?.let { it ->
             device = gson.fromJson(it, Device::class.java)
             val macaddress = device!!.macaddress.uppercase(Locale.ROOT)
@@ -50,8 +38,6 @@ class TrackWorker @Inject constructor(context: Context, parameters: WorkerParame
             listofMacaddress.add(macaddress)
             IS_SCANNING.postValue(true)
             bluetoothScanner = BluetoothScanner(_context, listofMacaddress)
-
-
 
             when (SCANNING_STATUS.value) {
                 true -> {
