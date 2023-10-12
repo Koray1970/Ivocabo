@@ -3,6 +3,7 @@ package com.serko.ivocabo
 import android.annotation.SuppressLint
 import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore.Audio.Artists
 import android.util.Log
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -94,6 +95,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
@@ -129,7 +131,7 @@ import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
 import com.serko.ivocabo.data.User
 import com.serko.ivocabo.data.userViewModel
-import com.serko.ivocabo.location.NetworkLocation
+import com.serko.ivocabo.location.AppFusedLocationRepo
 import com.serko.ivocabo.remote.membership.EventResult
 import com.serko.ivocabo.remote.membership.SignInRequest
 import com.serko.ivocabo.remote.membership.SignInResponse
@@ -142,11 +144,16 @@ import com.utsman.osmandcompose.ZoomButtonVisibility
 import com.utsman.osmandcompose.rememberCameraState
 import com.utsman.osmandcompose.rememberMarkerState
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.cancellable
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import retrofit2.Call
@@ -154,6 +161,8 @@ import retrofit2.Callback
 import retrofit2.Response
 import java.util.Locale
 import java.util.UUID
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.coroutineContext
 
 //koko
 //koko@gmail.com
@@ -220,9 +229,11 @@ private val dummyDevice = Device(null, "", null, "", null, null, null, null, nul
 @Composable
 fun ComposeProgress(dialogshow: MutableState<Boolean>) {
     if (dialogshow.value) {
-        AlertDialog(onDismissRequest = { dialogshow.value = false }, properties = DialogProperties(
-            usePlatformDefaultWidth = false
-        ), content = {
+        AlertDialog(
+            onDismissRequest = { dialogshow.value = false },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false),
+            content = {
             Surface(modifier = Modifier.fillMaxSize(), color = Color.Black.copy(alpha = .7f)) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -251,7 +262,6 @@ fun Dashboard(
     navController: NavController = rememberNavController(),
     composeProgressStatus: MutableState<Boolean>,
     userviewModel: userViewModel = hiltViewModel(),
-    //locationViewModel: LocationViewModel = hiltViewModel(),
 ) {
     composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
@@ -270,35 +280,35 @@ fun Dashboard(
         var latlang by remember { mutableStateOf(LatLng(0.0, 0.0)) }
         val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
         var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
+        mapProperties = mapProperties
+            .copy(isTilesScaledToDpi = true)
+            .copy(tileSources = TileSourceFactory.MAPNIK)
+            .copy(isEnableRotationGesture = false)
+            .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+
         val cameraState = rememberCameraState {
             geoPoint = GeoPoint(0.0, 0.0)
             zoom = 19.0 // optional, default is 5.0
         }
-        //SideEffect {
-            val networkLocation = NetworkLocation(context)
-            LaunchedEffect(Unit) {
 
-                val nn=networkLocation.getCurrentLocation().cancellable().collect {
-                    latlang = it.value
-                    Log.v("MainActivity","LatLng : ${gson.toJson(latlang)}")
 
-                    //start:Map Properties
-                    val geopoint =
-                        GeoPoint(latlang.latitude, latlang.longitude)
-                    cameraState.geoPoint = geopoint
-                    mapMarkerState.geoPoint = geopoint
-
-                    mapProperties = mapProperties
-                        .copy(isTilesScaledToDpi = true)
-                        .copy(tileSources = TileSourceFactory.MAPNIK)
-                        .copy(isEnableRotationGesture = false)
-                        .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
-                    //end:Map Properties
-                    //this.coroutineContext.job.cancel()
+        val networkLocation = AppFusedLocationRepo(context)
+        LaunchedEffect(Unit) {
+            networkLocation.startCurrentLocation()
+                .flowOn(Dispatchers.IO)
+                .collect { loc ->
+                    if (loc != null) {
+                        currentLocation = loc!!
+                        Log.v("MainActivity", "LatLng : ${gson.toJson(currentLocation)}")
+                        val geopoint =
+                            GeoPoint(currentLocation.latitude, currentLocation.longitude)
+                        cameraState.geoPoint = geopoint
+                        mapMarkerState.geoPoint = geopoint
+                    }
                 }
 
-            }
-        //}
+        }
+        composeProgressStatus.value = false
 
 
         val focusManager = LocalFocusManager.current
@@ -325,13 +335,6 @@ fun Dashboard(
                 nselecteddevice = deviceIconlist.first { it.id == tDevice.devicetype!! }
             selectedOption = nselecteddevice
             onOptionSelected = nselecteddevice
-
-
-
-            MainScope().launch {
-                delay(320)
-                composeProgressStatus.value = false
-            }
         }
         //end::Device Form assets
         Scaffold(floatingActionButton = {
@@ -356,13 +359,27 @@ fun Dashboard(
             )
         }, floatingActionButtonPosition = FabPosition.End) {
             Column(modifier = Modifier.padding(it)) {
-                OpenStreetMap(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(380.dp),
-                    cameraState = cameraState,
-                    properties = mapProperties, // add properties
-                ) { Marker(state = mapMarkerState) }
+                        .height(380.dp)
+                ) {
+
+                    OpenStreetMap(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(380.dp),
+                        cameraState = cameraState,
+                        properties = mapProperties, // add properties
+                    ) { Marker(state = mapMarkerState) }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    ) {
+                        Text(text = "Latitude: ${latlang.latitude} - ${latlang.longitude}")
+                    }
+                }
                 HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
                 LazyColumn(
                     modifier = Modifier
@@ -441,6 +458,7 @@ fun Dashboard(
                                 dismissContent = {
                                     Card(
                                         modifier = Modifier.clickable(onClick = {
+                                            networkLocation.stopLocationJob.tryEmit(true)
                                             navController.navigate("devicedashboard/${dd.macaddress}")
                                         }),
                                         shape = RoundedCornerShape(0.dp),

@@ -6,7 +6,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Looper
-import androidx.compose.runtime.MutableState
+import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.MutableLiveData
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -16,45 +16,57 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.model.LatLng
+import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 
-class NetworkLocation constructor(private val context: Context) {
+interface IAppFusedLocation {
+    fun startCurrentLocation(): Flow<LatLng>
+}
 
+class AppFusedLocationRepo @Inject constructor(@ApplicationContext private val context: Context) :
+    IAppFusedLocation {
+
+    var stopLocationJob = MutableStateFlow<Boolean>(false)
+
+    val gson = Gson()
+
+    private lateinit var locationCallback: LocationCallback
     private val fusedLocationClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
 
+
     @SuppressLint("MissingPermission")
-    fun getCurrentLocation(): Flow<MutableState<LatLng>> = callbackFlow {
-        val locationRequest = LocationRequest.Builder(1000)
-            .setIntervalMillis(1000)
-            .setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
+    override fun startCurrentLocation(): Flow<LatLng> = callbackFlow {
+        val locationRequest = LocationRequest
+            .Builder(10000)
+            .setIntervalMillis(10000)
+            .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
             .build()
-        val locationCallback = object : LocationCallback() {
+
+        locationCallback = object : LocationCallback() {
             override fun onLocationResult(p0: LocationResult) {
                 super.onLocationResult(p0)
-                MainScope().launch {
-                    send(
-                        mutableStateOf(
-                            LatLng(
-                                p0.locations.last().latitude,
-                                p0.locations.last().longitude
-                            )
-                        )
+                p0 ?: return
+                trySend(
+                    LatLng(
+                        p0.lastLocation!!.latitude,
+                        p0.lastLocation!!.longitude
                     )
-                }
-
-                //fusedLocationClient.removeLocationUpdates(this)
+                ).isSuccess
             }
         }
+
         fusedLocationClient.requestLocationUpdates(
             locationRequest,
             locationCallback,
@@ -63,8 +75,12 @@ class NetworkLocation constructor(private val context: Context) {
         awaitClose {
             fusedLocationClient.removeLocationUpdates(locationCallback)
         }
+        stopLocationJob.collect {
+            if (it)
+                if (fusedLocationClient != null)
+                    fusedLocationClient.removeLocationUpdates(locationCallback)
+        }
     }
-
 }
 
 class GPSLocation @Inject constructor(@ApplicationContext private var context: Context) {
