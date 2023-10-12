@@ -94,7 +94,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
@@ -113,11 +112,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import androidx.work.Data
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
@@ -134,9 +129,7 @@ import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
 import com.serko.ivocabo.data.User
 import com.serko.ivocabo.data.userViewModel
-import com.serko.ivocabo.location.GetCurrentLocation
-import com.serko.ivocabo.location.LOCATIONSTATUS
-import com.serko.ivocabo.location.LocationViewModel
+import com.serko.ivocabo.location.NetworkLocation
 import com.serko.ivocabo.remote.membership.EventResult
 import com.serko.ivocabo.remote.membership.SignInRequest
 import com.serko.ivocabo.remote.membership.SignInResponse
@@ -152,6 +145,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.cancellable
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -189,63 +183,8 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
                 ) {
                     val composeProgressDialogStatus = remember { mutableStateOf(false) }
+                    AppNavigation(composeProgressDialogStatus)
 
-                    val navController = rememberNavController()
-                    NavHost(navController = navController, startDestination = Screen.Signup.route) {
-                        composable(Screen.Signup.route) {
-                            Signup(
-                                navController, composeProgressDialogStatus
-                            )
-                        }
-                        composable(Screen.Signin.route) {
-                            SignIn(
-                                navController, composeProgressDialogStatus
-                            )
-                        }
-                        composable(Screen.ForgetPassword.route) { ForgetPassword(navController) }
-                        composable(Screen.Dashboard.route) {
-                            Dashboard(
-                                navController,
-                                composeProgressDialogStatus
-                            )
-                        }
-                        composable(
-                            Screen.DeviceDashboard.route,
-                            arguments = listOf(navArgument("macaddress") {
-                                type = NavType.StringType
-                            })
-                        ) {
-                            DeviceDashboard(
-                                macaddress = it.arguments?.getString("macaddress"),
-                                navController,
-                                composeProgressDialogStatus
-                            )
-                        }
-                        composable(
-                            Screen.FindMyDevice.route,
-                            arguments = listOf(navArgument("macaddress") {
-                                type = NavType.StringType
-                            })
-                        ) {
-                            FindMyDevice(
-                                macaddress = it.arguments?.getString("macaddress"),
-                                navController,
-                                composeProgressDialogStatus
-                            )
-                        }
-                        composable(
-                            Screen.TrackMyDevice.route,
-                            arguments = listOf(navArgument("macaddress") {
-                                type = NavType.StringType
-                            })
-                        ) {
-                            TrackMyDevice(
-                                macaddress = it.arguments?.getString("macaddress"),
-                                navController,
-                                composeProgressDialogStatus
-                            )
-                        }
-                    }
                     ComposeProgress(composeProgressDialogStatus)
                 }
             }
@@ -302,7 +241,9 @@ fun ComposeProgress(dialogshow: MutableState<Boolean>) {
 
 val formTitle =
     TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-fun DoNothing(){}
+
+fun DoNothing() {}
+
 @SuppressLint("CoroutineCreationDuringComposition")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
@@ -310,23 +251,11 @@ fun Dashboard(
     navController: NavController = rememberNavController(),
     composeProgressStatus: MutableState<Boolean>,
     userviewModel: userViewModel = hiltViewModel(),
-    locationViewModel: LocationViewModel = hiltViewModel(),
+    //locationViewModel: LocationViewModel = hiltViewModel(),
 ) {
     composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
 
-    val getloooc=GetCurrentLocation(context,LocalLifecycleOwner.current)
-    getloooc.getCurrentLocation().observe(LocalLifecycleOwner.current) {
-        when (it) {
-            null -> {
-                DoNothing()
-            }
-
-            else -> {
-                Log.v("MainActivity", "Location: ${gson.toJson(it)}")
-            }
-        }
-    }
 
     val locationPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
         LocationPermission(context)
@@ -338,6 +267,39 @@ fun Dashboard(
         }
     } else {
         val scope = rememberCoroutineScope()
+        var latlang by remember { mutableStateOf(LatLng(0.0, 0.0)) }
+        val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
+        var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
+        val cameraState = rememberCameraState {
+            geoPoint = GeoPoint(0.0, 0.0)
+            zoom = 19.0 // optional, default is 5.0
+        }
+        //SideEffect {
+            val networkLocation = NetworkLocation(context)
+            LaunchedEffect(Unit) {
+
+                val nn=networkLocation.getCurrentLocation().cancellable().collect {
+                    latlang = it.value
+                    Log.v("MainActivity","LatLng : ${gson.toJson(latlang)}")
+
+                    //start:Map Properties
+                    val geopoint =
+                        GeoPoint(latlang.latitude, latlang.longitude)
+                    cameraState.geoPoint = geopoint
+                    mapMarkerState.geoPoint = geopoint
+
+                    mapProperties = mapProperties
+                        .copy(isTilesScaledToDpi = true)
+                        .copy(tileSources = TileSourceFactory.MAPNIK)
+                        .copy(isEnableRotationGesture = false)
+                        .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+                    //end:Map Properties
+                    //this.coroutineContext.job.cancel()
+                }
+
+            }
+        //}
+
 
         val focusManager = LocalFocusManager.current
         val keyboardController = LocalSoftwareKeyboardController.current
@@ -351,12 +313,7 @@ fun Dashboard(
         var deviceMacaddress by rememberSaveable { mutableStateOf(tDevice.macaddress) }
 
         val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
-        val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
-        var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
-        val cameraState = rememberCameraState {
-            geoPoint = GeoPoint(0.0, 0.0)
-            zoom = 19.0 // optional, default is 5.0
-        }
+
         SideEffect {
             userviewModel.getDbDeviceList()
 
@@ -370,42 +327,7 @@ fun Dashboard(
             onOptionSelected = nselecteddevice
 
 
-            //start:Map Properties
-            scope.launch {
-                locationViewModel.latlang.cancellable().collect {
-                    /*Log.v(
-                        "Location Detail",
-                        "Status: ${it.statestatus}"
-                    )*/
-                    when (it.statestatus) {
-                        LOCATIONSTATUS.Running -> {
-                            currentLocation = it.latlng
 
-                            val geopoint =
-                                GeoPoint(currentLocation.latitude, currentLocation.longitude)
-                            cameraState.geoPoint = geopoint
-                            mapMarkerState.geoPoint = geopoint
-
-                            mapProperties = mapProperties
-                                .copy(isTilesScaledToDpi = true)
-                                .copy(tileSources = TileSourceFactory.MAPNIK)
-                                .copy(isEnableRotationGesture = false)
-                                .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
-
-
-                           /*Log.v(
-                                "Location Detail",
-                                "Location: ${currentLocation.latitude},${currentLocation.longitude}"
-                            )*/
-                        }
-
-                        LOCATIONSTATUS.Has_Exception -> Log.v("Location Detail", "has exception")
-                        else -> Log.v("Location Detail", "NOTHING")
-                    }
-                }
-
-            }
-            //end:Map Properties
             MainScope().launch {
                 delay(320)
                 composeProgressStatus.value = false
@@ -1423,13 +1345,14 @@ fun DeviceDashboard(
                                                         .build()
                                                 WorkManager.getInstance(context)
                                                     .enqueue(notifybluetooth!!)
-                                                val trackObserver=TrackWorker.IS_SCANNING.observeForever {
-                                                    if(it==false){
-                                                        WorkManager.getInstance(context)
-                                                            .cancelWorkById(ntfUUID)
-                                                        chkNotificationCheckState=false
+                                                val trackObserver =
+                                                    TrackWorker.IS_SCANNING.observeForever {
+                                                        if (it == false) {
+                                                            WorkManager.getInstance(context)
+                                                                .cancelWorkById(ntfUUID)
+                                                            chkNotificationCheckState = false
+                                                        }
                                                     }
-                                                }
                                             } else {
                                                 TrackWorker.SCANNING_STATUS.value = false
                                                 WorkManager.getInstance(context)
@@ -1912,6 +1835,7 @@ fun TrackMyDevice(
         BackHandler(true) {}
     }
 }
+
 
 /*@Preview(showBackground = true)
 @Composable
