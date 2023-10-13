@@ -154,6 +154,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import retrofit2.Call
@@ -222,7 +223,7 @@ class MainActivity : ComponentActivity() {
 
 val gson = Gson()
 val helper = Helper()
-private lateinit var currentLocation: LatLng
+
 private val dummyDevice = Device(null, "", null, "", null, null, null, null, null, null)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -232,21 +233,22 @@ fun ComposeProgress(dialogshow: MutableState<Boolean>) {
         AlertDialog(
             onDismissRequest = { dialogshow.value = false },
             properties = DialogProperties(
-                usePlatformDefaultWidth = false),
+                usePlatformDefaultWidth = false
+            ),
             content = {
-            Surface(modifier = Modifier.fillMaxSize(), color = Color.Black.copy(alpha = .7f)) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.width(100.dp),
-                        strokeWidth = 16.dp,
-                        strokeCap = ProgressIndicatorDefaults.CircularDeterminateStrokeCap
-                    )
+                Surface(modifier = Modifier.fillMaxSize(), color = Color.Black.copy(alpha = .7f)) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.width(100.dp),
+                            strokeWidth = 16.dp,
+                            strokeCap = ProgressIndicatorDefaults.CircularDeterminateStrokeCap
+                        )
+                    }
                 }
-            }
-        })
+            })
     }
 }
 
@@ -277,7 +279,7 @@ fun Dashboard(
         }
     } else {
         val scope = rememberCoroutineScope()
-        var latlang by remember { mutableStateOf(LatLng(0.0, 0.0)) }
+        var currentLocation by remember { mutableStateOf(LatLng(0.0, 0.0)) }
         val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
         var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
         mapProperties = mapProperties
@@ -294,19 +296,20 @@ fun Dashboard(
 
         val networkLocation = AppFusedLocationRepo(context)
         LaunchedEffect(Unit) {
-            networkLocation.startCurrentLocation()
-                .flowOn(Dispatchers.IO)
-                .collect { loc ->
-                    if (loc != null) {
-                        currentLocation = loc!!
-                        Log.v("MainActivity", "LatLng : ${gson.toJson(currentLocation)}")
-                        val geopoint =
-                            GeoPoint(currentLocation.latitude, currentLocation.longitude)
-                        cameraState.geoPoint = geopoint
-                        mapMarkerState.geoPoint = geopoint
+            withTimeoutOrNull(10001) {
+                networkLocation.startCurrentLocation()
+                    .flowOn(Dispatchers.IO)
+                    .collect { loc ->
+                        if (loc != null) {
+                            currentLocation = loc!!
+                            Log.v("MainActivity", "LatLng : ${gson.toJson(currentLocation)}")
+                            val geopoint =
+                                GeoPoint(currentLocation.latitude, currentLocation.longitude)
+                            cameraState.geoPoint = geopoint
+                            mapMarkerState.geoPoint = geopoint
+                        }
                     }
-                }
-
+            }
         }
         composeProgressStatus.value = false
 
@@ -377,7 +380,7 @@ fun Dashboard(
                             .fillMaxWidth()
                             .height(50.dp)
                     ) {
-                        Text(text = "Latitude: ${latlang.latitude} - ${latlang.longitude}")
+                        Text(text = "Latitude: ${currentLocation.latitude} - ${currentLocation.longitude}")
                     }
                 }
                 HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())

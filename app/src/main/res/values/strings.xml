@@ -35,7 +35,7 @@
     <string name="findmydevice">Find %s</string>
     <string name="missing">Missing</string>
     <!--End::Device Dashboard-->
-    <string name="enablebluetooth">Please enable GSM bluetooth!</string>
+    <string name="enablebluetooth">Please enable your cellular device bluetooth!</string>
     <!--Start::Notification Details-->
     <string name="ntf_title">Ivocabo Device Tracking Alert</string>
     <string name="ntf_summary">%s is not reached!</string>

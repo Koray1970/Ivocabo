@@ -18,6 +18,7 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -80,7 +82,7 @@ class AppFusedLocationRepo @Inject constructor(@ApplicationContext private val c
                 if (fusedLocationClient != null)
                     fusedLocationClient.removeLocationUpdates(locationCallback)
         }
-    }
+    }.flowOn(Dispatchers.Default)
 }
 
 class GPSLocation @Inject constructor(@ApplicationContext private var context: Context) {
