@@ -79,8 +79,7 @@ class AppFusedLocationRepo @Inject constructor(@ApplicationContext private val c
         }
         stopLocationJob.collect {
             if (it)
-                if (fusedLocationClient != null)
-                    fusedLocationClient.removeLocationUpdates(locationCallback)
+                fusedLocationClient?.removeLocationUpdates(locationCallback)
         }
     }.flowOn(Dispatchers.Default)
 }

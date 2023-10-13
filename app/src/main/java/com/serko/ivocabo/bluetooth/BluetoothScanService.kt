@@ -15,7 +15,10 @@ import androidx.compose.ui.text.toUpperCase
 import com.serko.ivocabo.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
@@ -23,11 +26,12 @@ import java.util.Locale
 import javax.inject.Inject
 
 interface IBluetoothScanService {
-    fun bluetoothScanner(): Flow<MutableList<ScanResult>?>
+    fun bluetoothScanner(): Flow<MutableList<BluetoothScannerResult>?>
 }
 
 class BluetoothScanService @Inject constructor(@ApplicationContext private val context: Context) :
     IBluetoothScanService {
+    var stopLocationJob = MutableStateFlow<Boolean>(false)
     val flowListOfMacaddress = flowOf<MutableList<String>>()
     var listOfMacaddress = mutableListOf<String>()
     private val bluetoothManager: BluetoothManager =
@@ -36,13 +40,16 @@ class BluetoothScanService @Inject constructor(@ApplicationContext private val c
     private lateinit var bluetoothLeScanner: BluetoothLeScanner
     private lateinit var scanSetting: ScanSettings
     private var scanList = mutableListOf<ScanFilter>()
-    override fun bluetoothScanner(): Flow<MutableList<ScanResult>?> = callbackFlow {
+    private var resultList = mutableListOf<BluetoothScannerResult>()
+
+    @SuppressLint("MissingPermission")
+    override fun bluetoothScanner(): Flow<MutableList<BluetoothScannerResult>?> = callbackFlow {
         bluetoothAdapter = bluetoothManager.adapter
         if (bluetoothAdapter?.isEnabled == false) {
             Toast.makeText(context, context.getString(R.string.enablebluetooth), Toast.LENGTH_LONG)
                 .show()
         } else {
-            bluetoothLeScanner = bluetoothAdapter?.bluetoothLeScanner!!
+            var scanCallback: ScanCallback? = null
             scanSetting = ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
                 .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
@@ -50,59 +57,99 @@ class BluetoothScanService @Inject constructor(@ApplicationContext private val c
                 .setReportDelay(3000)
                 //.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
                 .build()
+            scanList = mutableListOf<ScanFilter>()
             flowListOfMacaddress.flowOn(Dispatchers.Default).collect { mc ->
                 if (mc.isNotEmpty()) {
                     mc.forEach { i ->
-                        listOfMacaddress.add(i.uppercase(Locale.ROOT))
+                        scanList.add(
+                            ScanFilter.Builder().setDeviceAddress(i.uppercase(Locale.ROOT)).build()
+                        )
                     }
-                    listOfMacaddress = listOfMacaddress.distinct().toMutableList()
+                    scanList = scanList.distinctBy { a -> a.deviceAddress }.toMutableList()
+                } else {
+                    bluetoothLeScanner?.stopScan(scanCallback)
                 }
-                else{
+                if (resultList.isNotEmpty()) {
+                    resultList =
+                        resultList.filter { a -> scanList.any { s -> s.deviceAddress == a.macaddress } }
+                            .toMutableList()
+                }
+            }
 
-                }
-            }
-            scanList = mutableListOf<ScanFilter>()
-            listOfMacaddress.forEach {a->
-                scanList.add(
-                    ScanFilter.Builder()
-                        .setDeviceAddress(a.uppercase(Locale.ROOT))
-                        .build()
-                )
-            }
-            if (listOfMacaddress.isNotEmpty()) {
-                listOfMacaddress = listOfMacaddress.distinct().toMutableList()
-                setListofMacaddress()
+            bluetoothLeScanner = bluetoothAdapter?.bluetoothLeScanner!!
 
-                listOfMacaddress?.forEach {
-                    scanList.add(
-                        ScanFilter.Builder()
-                            .setDeviceAddress(it.uppercase(Locale.ROOT))
-                            .build()
-                    )
-                }
-            }
-            //scan islemleri baslar
-            val scanCallback: ScanCallback = object : ScanCallback() {
+            scanCallback = object : ScanCallback() {
                 override fun onScanResult(callbackType: Int, result: ScanResult?) {
                     super.onScanResult(callbackType, result)
-                    //currentRssi.postValue(result?.rssi)
-                    //Log.v(TAG, "RSSI : ${result?.rssi}")
+                    result ?: return
                 }
 
                 @SuppressLint("MissingPermission")
                 override fun onBatchScanResults(results: MutableList<ScanResult>?) {
                     super.onBatchScanResults(results)
+                    results ?: return
+                    if (results.isNotEmpty()) {
+                        if (resultList.isNotEmpty()) {
 
-                    //Log.v(BluetoothScanner.TAG, "ScanResults : ${BluetoothScanner.gson.toJson(results)}")
+                        } else {
+                            results.forEach { a ->
+                                var findScanResult = resu
+                                resultList.add(
+                                    BluetoothScannerResult(
+                                        a.device.address,
+                                        a.rssi,
+                                        1,
+                                        BluetoothScannerCallbackStatus.SCANNING
+                                    )
+                                )
+                            }
+                        }
+                    } else {
+                        //arama sonucu bos dundu ise
+                        if (resultList.isNotEmpty()) {
+                            resultList.forEach { a ->
+                                var flt =
+                                    resultList.filter { g -> scanList.any { h -> h.deviceAddress == g.macaddress } }
+                                if(flt.isNotEmpty()) {
+                                    if (a.countOfDisconnected == null) a.countOfDisconnected = 0
+                                    a.countOfDisconnected = a.countOfDisconnected!! + 1
 
-                }
-
-                override fun onScanFailed(errorCode: Int) {
-                    super.onScanFailed(errorCode)
-                    //Log.v(BluetoothScanner.TAG, "ERROR CODE : $errorCode")
+                                    if (a.countOfDisconnected!! >= 10)
+                                        a.callbackStatus =
+                                            BluetoothScannerCallbackStatus.DEVICE_NOT_FOUND
+                                    else
+                                        a.callbackStatus = BluetoothScannerCallbackStatus.SCANNING
+                                }
+                                else
+                                    resultList.removeAll(flt)
+                            }
+                        } else {
+                            scanList.forEach { a ->
+                                resultList.add(
+                                    BluetoothScannerResult(
+                                        a.deviceAddress,
+                                        null,
+                                        1,
+                                        BluetoothScannerCallbackStatus.SCANNING
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
             }
-        }
+            if (scanList.isNotEmpty()) {
+                delay(100)
+                bluetoothLeScanner.startScan(scanList, scanSetting, scanCallback)
+            }
 
+            awaitClose {
+                bluetoothLeScanner?.stopScan(scanCallback)
+            }
+            stopLocationJob.collect {
+                if (it)
+                    bluetoothLeScanner?.stopScan(scanCallback)
+            }
+        }
     }
 }
