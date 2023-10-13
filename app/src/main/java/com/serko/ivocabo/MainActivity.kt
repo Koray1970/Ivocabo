@@ -124,6 +124,7 @@ import com.google.accompanist.permissions.MultiplePermissionsState
 import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
 import com.serko.ivocabo.api.IApiService
+import com.serko.ivocabo.bluetooth.BluetoothScanService
 import com.serko.ivocabo.bluetooth.BluetoothScanner
 import com.serko.ivocabo.bluetooth.BluetoothScannerCallbackStatus
 import com.serko.ivocabo.data.Device
@@ -147,9 +148,11 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.cancellable
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
@@ -1454,7 +1457,7 @@ fun DeviceDashboard(
     }
 }
 
-private lateinit var bluetoothScanner: BluetoothScanner
+private lateinit var bluetoothScanService: BluetoothScanService
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -1488,9 +1491,9 @@ fun FindMyDevice(
         if (deviceDetail.devicetype != null)
             if (deviceDetail.devicetype == 2)
                 deviceIcon = R.drawable.e9_icon_32
-        val _macaddress = macaddress.uppercase()
+        val _macaddress = macaddress.uppercase(Locale.ROOT)
         val listofMacaddress = mutableListOf<String>()
-        listofMacaddress.add(_macaddress.uppercase(Locale.ROOT))
+        listofMacaddress.add(_macaddress)
 
         val defaultMetricTextStyle = TextStyle(
             fontWeight = FontWeight.ExtraBold,
@@ -1509,20 +1512,13 @@ fun FindMyDevice(
             )
         }
 
-
-        bluetoothScanner = BluetoothScanner(context, listofMacaddress)
+        bluetoothScanService = BluetoothScanService(context)
+        bluetoothScanService.flowListOfMacaddress = flowOf(listofMacaddress)
 
         LaunchedEffect(Unit) {
-            delay(320)
-            bluetoothScanner.StartScan()
-        }
-        val scanResults by bluetoothScanner.getBluetoothScannerResults().observeAsState()
-
-
-        if (scanResults?.isNotEmpty() == true) {
-            var getCurrentDeviceResult = scanResults!!.last { a -> a.macaddress == _macaddress }
-            when (getCurrentDeviceResult.callbackStatus) {
-                BluetoothScannerCallbackStatus.CONNECTION_LOST -> {
+            delay(100)
+            bluetoothScanService.bluetoothScanner().flowOn(Dispatchers.Default).collect { d ->
+                if (d == null) {
                     val notify = AppNotification(
                         context,
                         NotifyItem(deviceDetail, "Title", "Summary", "Context")
@@ -1530,29 +1526,37 @@ fun FindMyDevice(
                     if (composeProgressStatus.value)
                         composeProgressStatus.value = false
                     metricDistance = context.getString(R.string.devicecannotbereached)
-                }
+                } else {
+                    var rtl = d.first { g -> g.macaddress == _macaddress }
+                    when (rtl.callbackStatus) {
+                        BluetoothScannerCallbackStatus.DEVICE_NOT_FOUND -> {
+                            val notify = AppNotification(
+                                context,
+                                NotifyItem(deviceDetail, "Title", "Summary", "Context")
+                            )
+                            if (composeProgressStatus.value)
+                                composeProgressStatus.value = false
+                            metricDistance = context.getString(R.string.devicecannotbereached)
+                        }
 
-                BluetoothScannerCallbackStatus.CONNECTING -> {
-                    metricDistanceTextStyle = defaultMetricTextStyle
-                    if (composeProgressStatus.value)
-                        composeProgressStatus.value = false
-                    metricDistance =
-                        helper.CalculateRSSIToMeter(getCurrentDeviceResult.rssi)
-                            .toString() + "mt"
-                }
+                        BluetoothScannerCallbackStatus.CONNECTING -> {
+                            metricDistanceTextStyle = defaultMetricTextStyle
+                            if (composeProgressStatus.value)
+                                composeProgressStatus.value = false
+                            metricDistance =
+                                helper.CalculateRSSIToMeter(rtl.rssi)
+                                    .toString() + "mt"
+                        }
 
-                else -> {
-                    composeProgressStatus.value = true
-                    metricDistanceTextStyle = scanningMetricTextStyle
-                    metricDistance = context.getString(R.string.scanning)
+                        else -> {
+                            composeProgressStatus.value = true
+                            metricDistanceTextStyle = scanningMetricTextStyle
+                            metricDistance = context.getString(R.string.scanning)
+                        }
+                    }
                 }
             }
-        } else {
-            composeProgressStatus.value = true
-            metricDistanceTextStyle = scanningMetricTextStyle
-            metricDistance = context.getString(R.string.scanning)
         }
-
         Scaffold(
             floatingActionButton = {
                 FloatingActionButton(
@@ -1560,7 +1564,7 @@ fun FindMyDevice(
                     shape = CircleShape,
                     onClick = {
                         MainScope().launch {
-                            bluetoothScanner.StopScan()
+                            bluetoothScanService.stopLocationJob = MutableStateFlow<Boolean>(true)
                             delay(300)
                             navController.navigate("devicedashboard/${deviceDetail.macaddress}")
                         }
@@ -1712,51 +1716,50 @@ fun TrackMyDevice(
             }
 
 
-            bluetoothScanner = BluetoothScanner(context, listofMacaddress)
+            bluetoothScanService = BluetoothScanService(context)
+            bluetoothScanService.flowListOfMacaddress = flowOf(listofMacaddress)
 
             LaunchedEffect(Unit) {
-                delay(320)
-                bluetoothScanner.StartScan()
-            }
-            val scanResults by bluetoothScanner.getBluetoothScannerResults().observeAsState()
-
-
-            if (scanResults?.isNotEmpty() == true) {
-                var getCurrentDeviceResult = scanResults!!.last { a -> a.macaddress == _macaddress }
-                when (getCurrentDeviceResult.callbackStatus) {
-                    BluetoothScannerCallbackStatus.CONNECTION_LOST -> {
+                delay(100)
+                bluetoothScanService.bluetoothScanner().flowOn(Dispatchers.Default).collect { d ->
+                    if (d == null) {
                         val notify = AppNotification(
                             context,
-                            NotifyItem(
-                                deviceDetail, context.getString(R.string.ntf_title),
-                                String.format(context.getString(R.string.ntf_title), _macaddress),
-                                String.format(context.getString(R.string.ntf_title), _macaddress)
-                            )
+                            NotifyItem(deviceDetail, "Title", "Summary", "Context")
                         )
                         if (composeProgressStatus.value)
                             composeProgressStatus.value = false
                         metricDistance = context.getString(R.string.devicecannotbereached)
-                    }
+                    } else {
+                        var rtl = d.first { g -> g.macaddress == _macaddress }
+                        when (rtl.callbackStatus) {
+                            BluetoothScannerCallbackStatus.DEVICE_NOT_FOUND -> {
+                                val notify = AppNotification(
+                                    context,
+                                    NotifyItem(deviceDetail, "Title", "Summary", "Context")
+                                )
+                                if (composeProgressStatus.value)
+                                    composeProgressStatus.value = false
+                                metricDistance = context.getString(R.string.devicecannotbereached)
+                            }
 
-                    BluetoothScannerCallbackStatus.CONNECTING -> {
-                        metricDistanceTextStyle = defaultMetricTextStyle
-                        if (composeProgressStatus.value)
-                            composeProgressStatus.value = false
-                        metricDistance =
-                            helper.CalculateRSSIToMeter(getCurrentDeviceResult.rssi)
-                                .toString() + "mt"
-                    }
+                            BluetoothScannerCallbackStatus.CONNECTING -> {
+                                metricDistanceTextStyle = defaultMetricTextStyle
+                                if (composeProgressStatus.value)
+                                    composeProgressStatus.value = false
+                                metricDistance =
+                                    helper.CalculateRSSIToMeter(rtl.rssi)
+                                        .toString() + "mt"
+                            }
 
-                    else -> {
-                        composeProgressStatus.value = true
-                        metricDistanceTextStyle = scanningMetricTextStyle
-                        metricDistance = context.getString(R.string.scanning)
+                            else -> {
+                                composeProgressStatus.value = true
+                                metricDistanceTextStyle = scanningMetricTextStyle
+                                metricDistance = context.getString(R.string.scanning)
+                            }
+                        }
                     }
                 }
-            } else {
-                composeProgressStatus.value = true
-                metricDistanceTextStyle = scanningMetricTextStyle
-                metricDistance = context.getString(R.string.scanning)
             }
 
             Scaffold(
@@ -1766,7 +1769,7 @@ fun TrackMyDevice(
                         shape = CircleShape,
                         onClick = {
                             MainScope().launch {
-                                bluetoothScanner.StopScan()
+                                bluetoothScanService.stopLocationJob = MutableStateFlow<Boolean>(true)
                                 delay(300)
                                 navController.navigate("devicedashboard/${deviceDetail.macaddress}")
                             }

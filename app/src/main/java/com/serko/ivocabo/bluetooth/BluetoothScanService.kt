@@ -32,7 +32,7 @@ interface IBluetoothScanService {
 class BluetoothScanService @Inject constructor(@ApplicationContext private val context: Context) :
     IBluetoothScanService {
     var stopLocationJob = MutableStateFlow<Boolean>(false)
-    val flowListOfMacaddress = flowOf<MutableList<String>>()
+    var flowListOfMacaddress = flowOf<MutableList<String>>()
     var listOfMacaddress = mutableListOf<String>()
     private val bluetoothManager: BluetoothManager =
         context.getSystemService(BluetoothManager::class.java)
@@ -69,10 +69,39 @@ class BluetoothScanService @Inject constructor(@ApplicationContext private val c
                 } else {
                     bluetoothLeScanner?.stopScan(scanCallback)
                 }
-                if (resultList.isNotEmpty()) {
-                    resultList =
-                        resultList.filter { a -> scanList.any { s -> s.deviceAddress == a.macaddress } }
-                            .toMutableList()
+                if (scanList.isEmpty()) {
+                    resultList = mutableListOf<BluetoothScannerResult>()
+                } else {
+                    if (resultList.isNotEmpty()) {
+                        //scanlist de olmayan elemanlar resultlist icinden cikarilir
+                        resultList.removeIf { a -> scanList.none { g -> g.deviceAddress == a.macaddress } }
+
+                        var fNoneDevice =
+                            scanList.filterNot { a -> resultList.any { g -> g.macaddress == a.deviceAddress } }
+                        if (fNoneDevice.isNotEmpty()) {
+                            fNoneDevice.forEach { s ->
+                                resultList.add(
+                                    BluetoothScannerResult(
+                                        s.deviceAddress,
+                                        null,
+                                        null,
+                                        null
+                                    )
+                                )
+                            }
+                        }
+                    } else {
+                        scanList.forEach { a ->
+                            resultList.add(
+                                BluetoothScannerResult(
+                                    a.deviceAddress,
+                                    null,
+                                    null,
+                                    null
+                                )
+                            )
+                        }
+                    }
                 }
             }
 
@@ -90,57 +119,51 @@ class BluetoothScanService @Inject constructor(@ApplicationContext private val c
                     results ?: return
                     if (results.isNotEmpty()) {
                         if (resultList.isNotEmpty()) {
-
-                        } else {
-                            results.forEach { a ->
-                                var findScanResult = resu
-                                resultList.add(
-                                    BluetoothScannerResult(
-                                        a.device.address,
-                                        a.rssi,
-                                        1,
-                                        BluetoothScannerCallbackStatus.SCANNING
-                                    )
-                                )
-                            }
-                        }
-                    } else {
-                        //arama sonucu bos dundu ise
-                        if (resultList.isNotEmpty()) {
                             resultList.forEach { a ->
-                                var flt =
-                                    resultList.filter { g -> scanList.any { h -> h.deviceAddress == g.macaddress } }
-                                if(flt.isNotEmpty()) {
+                                var fDevice =
+                                    results.first { g -> g.device.address == a.macaddress }
+                                if (fDevice != null) {
+                                    a.rssi = fDevice.rssi
+                                    a.callbackStatus = BluetoothScannerCallbackStatus.CONNECTING
+                                    a.countOfDisconnected = null
+                                } else {
+                                    a.rssi = null
                                     if (a.countOfDisconnected == null) a.countOfDisconnected = 0
                                     a.countOfDisconnected = a.countOfDisconnected!! + 1
-
                                     if (a.countOfDisconnected!! >= 10)
                                         a.callbackStatus =
                                             BluetoothScannerCallbackStatus.DEVICE_NOT_FOUND
                                     else
                                         a.callbackStatus = BluetoothScannerCallbackStatus.SCANNING
                                 }
-                                else
-                                    resultList.removeAll(flt)
                             }
                         } else {
-                            scanList.forEach { a ->
-                                resultList.add(
-                                    BluetoothScannerResult(
-                                        a.deviceAddress,
-                                        null,
-                                        1,
-                                        BluetoothScannerCallbackStatus.SCANNING
-                                    )
-                                )
+
+                        }
+                    } else {
+                        //scan result empty dondu ise resultlist tek tum liste
+                        if (resultList.isNotEmpty()) {
+                            resultList.forEach { a ->
+                                a.rssi = null
+                                if (a.countOfDisconnected == null) a.countOfDisconnected = 0
+                                a.countOfDisconnected = a.countOfDisconnected!! + 1
+                                if (a.countOfDisconnected!! >= 10)
+                                    a.callbackStatus =
+                                        BluetoothScannerCallbackStatus.DEVICE_NOT_FOUND
+                                else
+                                    a.callbackStatus = BluetoothScannerCallbackStatus.SCANNING
                             }
                         }
                     }
+                    trySend(resultList).isSuccess
                 }
             }
             if (scanList.isNotEmpty()) {
                 delay(100)
                 bluetoothLeScanner.startScan(scanList, scanSetting, scanCallback)
+            }
+            else{
+                bluetoothLeScanner?.stopScan(scanCallback)
             }
 
             awaitClose {
