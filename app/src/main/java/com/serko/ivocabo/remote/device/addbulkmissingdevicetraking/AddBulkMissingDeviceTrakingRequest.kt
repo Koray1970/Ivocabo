@@ -1,0 +1,3 @@
+package com.serko.ivocabo.remote.device.addbulkmissingdevicetraking
+
+class AddBulkMissingDeviceTrakingRequest : ArrayList<AddBulkMissingDeviceTrakingRequestItem>()

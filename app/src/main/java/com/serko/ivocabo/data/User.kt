@@ -4,7 +4,12 @@ import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Delete
@@ -17,6 +22,7 @@ import androidx.room.Update
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.serko.ivocabo.Helper
+import com.serko.ivocabo.IvocaboApplication
 import com.serko.ivocabo.R
 import com.serko.ivocabo.api.IApiService
 import com.serko.ivocabo.remote.device.addupdate.DeviceAddUpdateRequest
@@ -366,6 +372,15 @@ class userViewModel @Inject constructor(
             }
         }
     }
+    /*companion object {
+        val Factory: ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                val context = (this[APPLICATION_KEY] as IvocaboApplication).context
+                val repo = (this[APPLICATION_KEY] as IvocaboApplication).userRespo
+                userViewModel(context, repo)
+            }
+        }
+    }*/
 }
 
 enum class RMEventStatus { Initial, Running, Complete, Exception }

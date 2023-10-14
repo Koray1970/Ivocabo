@@ -3,7 +3,6 @@ package com.serko.ivocabo
 import android.annotation.SuppressLint
 import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore.Audio.Artists
 import android.util.Log
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -82,7 +81,6 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -95,7 +93,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
@@ -116,8 +113,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import androidx.work.Data
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
@@ -125,7 +124,6 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
 import com.serko.ivocabo.api.IApiService
 import com.serko.ivocabo.bluetooth.BluetoothScanService
-import com.serko.ivocabo.bluetooth.BluetoothScanner
 import com.serko.ivocabo.bluetooth.BluetoothScannerCallbackStatus
 import com.serko.ivocabo.data.Device
 import com.serko.ivocabo.data.RMEventStatus
@@ -149,14 +147,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.cancellable
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -165,8 +158,7 @@ import retrofit2.Callback
 import retrofit2.Response
 import java.util.Locale
 import java.util.UUID
-import kotlin.coroutines.CoroutineContext
-import kotlin.coroutines.coroutineContext
+import java.util.concurrent.TimeUnit
 
 //koko
 //koko@gmail.com
@@ -179,7 +171,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         //applicationContext.deleteDatabase("ivocabodb.db")
         hideSystemUI()
-
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         } else {
@@ -188,6 +179,7 @@ class MainActivity : ComponentActivity() {
                 systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         }
+
         setContent {
             IvocaboTheme {
                 // A surface container using the 'background' color from the theme
@@ -195,6 +187,16 @@ class MainActivity : ComponentActivity() {
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
                 ) {
+                    var unRequest= OneTimeWorkRequestBuilder<TrackWorker>().build()
+                    WorkManager.getInstance(this).enqueue(unRequest)
+                    val periodicWorkRequest =
+                        PeriodicWorkRequestBuilder<TrackWorker>(30, TimeUnit.MINUTES).build()
+                    WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                        "TrackMissingDevice",
+                        ExistingPeriodicWorkPolicy.KEEP,
+                        periodicWorkRequest
+                    )
+
                     val composeProgressDialogStatus = remember { mutableStateOf(false) }
                     AppNavigation(composeProgressDialogStatus)
 
@@ -1353,35 +1355,9 @@ fun DeviceDashboard(
                                     Switch(
                                         checked = chkNotificationCheckState,
                                         onCheckedChange = { cc ->
+                                            //track switch onchecked
                                             chkNotificationCheckState = cc
-                                            ntfUUID = UUID.randomUUID()
-                                            if (cc) {
-                                                TrackWorker.SCANNING_STATUS.value = true
-                                                notifybluetooth =
-                                                    OneTimeWorkRequestBuilder<TrackWorker>()
-                                                        .setId(ntfUUID)
-                                                        .setInputData(
-                                                            Data.Builder().putString(
-                                                                "device",
-                                                                gson.toJson(deviceDetail)
-                                                            ).build()
-                                                        )
-                                                        .build()
-                                                WorkManager.getInstance(context)
-                                                    .enqueue(notifybluetooth!!)
-                                                val trackObserver =
-                                                    TrackWorker.IS_SCANNING.observeForever {
-                                                        if (it == false) {
-                                                            WorkManager.getInstance(context)
-                                                                .cancelWorkById(ntfUUID)
-                                                            chkNotificationCheckState = false
-                                                        }
-                                                    }
-                                            } else {
-                                                TrackWorker.SCANNING_STATUS.value = false
-                                                WorkManager.getInstance(context)
-                                                    .cancelWorkById(ntfUUID)
-                                            }
+
                                         },
                                         thumbContent = if (chkNotificationCheckState) {
                                             {
@@ -1769,7 +1745,8 @@ fun TrackMyDevice(
                         shape = CircleShape,
                         onClick = {
                             MainScope().launch {
-                                bluetoothScanService.stopLocationJob = MutableStateFlow<Boolean>(true)
+                                bluetoothScanService.stopLocationJob =
+                                    MutableStateFlow<Boolean>(true)
                                 delay(300)
                                 navController.navigate("devicedashboard/${deviceDetail.macaddress}")
                             }

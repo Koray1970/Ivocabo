@@ -9,9 +9,7 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
-import android.util.Log
 import android.widget.Toast
-import androidx.compose.ui.text.toUpperCase
 import com.serko.ivocabo.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +23,16 @@ import kotlinx.coroutines.flow.flowOn
 import java.util.Locale
 import javax.inject.Inject
 
+//enum class BluetoothScannerState { INITIATE, START_SCAN, STOP_SCAN }
+enum class BluetoothScannerCallbackStatus() {
+    SCANNING, DEVICE_NOT_FOUND, CONNECTING, CONNECTION_LOST
+}
+data class BluetoothScannerResult(
+    val macaddress: String?,
+    var rssi: Int?,
+    var countOfDisconnected: Int?,
+    var callbackStatus: BluetoothScannerCallbackStatus?
+)
 interface IBluetoothScanService {
     fun bluetoothScanner(): Flow<MutableList<BluetoothScannerResult>?>
 }
@@ -33,7 +41,7 @@ class BluetoothScanService @Inject constructor(@ApplicationContext private val c
     IBluetoothScanService {
     var stopLocationJob = MutableStateFlow<Boolean>(false)
     var flowListOfMacaddress = flowOf<MutableList<String>>()
-    var listOfMacaddress = mutableListOf<String>()
+    //var listOfMacaddress = mutableListOf<String>()
     private val bluetoothManager: BluetoothManager =
         context.getSystemService(BluetoothManager::class.java)
     private var bluetoothAdapter: BluetoothAdapter? = null

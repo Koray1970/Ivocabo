@@ -8,12 +8,21 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
+import com.serko.ivocabo.data.UserDao
+import com.serko.ivocabo.data.UserRepository
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.GlobalScope
+import javax.inject.Inject
 
 @HiltAndroidApp
-class IvocaboApplication : Application() {
+class IvocaboApplication : Application(), Configuration.Provider {
     val applicationScope = GlobalScope
+
+
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
     override fun onCreate() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val soundUri =
@@ -35,4 +44,9 @@ class IvocaboApplication : Application() {
         }
         super.onCreate()
     }
+
+    override fun getWorkManagerConfiguration() =
+        Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .build()
 }

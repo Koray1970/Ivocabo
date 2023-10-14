@@ -1,5 +1,6 @@
 package com.serko.ivocabo.api
 
+import com.serko.ivocabo.remote.device.addbulkmissingdevicetraking.AddBulkMissingDeviceTrakingRequest
 import com.serko.ivocabo.remote.device.addmissingdevicetracking.AddMissingDeviceTrackingRequest
 import com.serko.ivocabo.remote.device.addremovemissingdevice.AddRemoveMissingDeviceRequest
 import com.serko.ivocabo.remote.device.addupdate.DeviceAddUpdateRequest
@@ -46,6 +47,9 @@ interface IApiService {
 
     @POST("device/addmissingdevicetracking")
     fun srvAddMissingDeviceTracking(@Header("authorization") token: String,@Body request: AddMissingDeviceTrackingRequest): Call<EventResult>
+
+    @POST("device/addbulkmissingdevicetracking")
+    fun srvAddBulkMissingDeviceTracking(@Header("authorization") token: String,@Body request: AddBulkMissingDeviceTrakingRequest): Call<Void>
 
     companion object {
         var apiService: IApiService? = null
