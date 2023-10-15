@@ -33,7 +33,7 @@ interface IApiService {
     @POST("device/devicelist")
     fun srvDeviceList(@Header("authorization") token: String): Call<DeviceListResponse>
 
-    @POST("device/addupdateDevice")
+    @POST("device/addupdatedevice")
     fun srvAddUpdateDevice(@Header("authorization") token: String,@Body request: DeviceAddUpdateRequest): Call<EventResult>
 
     @POST("device/deviceremove")

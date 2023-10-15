@@ -10,11 +10,11 @@ import android.net.Uri
 import android.os.Build
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import com.serko.ivocabo.data.UserDao
-import com.serko.ivocabo.data.UserRepository
+import com.serko.ivocabo.bluetooth.BluetoothScanService
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.GlobalScope
 import javax.inject.Inject
+import javax.inject.Singleton
 
 @HiltAndroidApp
 class IvocaboApplication : Application(), Configuration.Provider {
@@ -23,6 +23,12 @@ class IvocaboApplication : Application(), Configuration.Provider {
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
+    override fun getWorkManagerConfiguration():Configuration =
+        Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .build()
+
+
     override fun onCreate() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val soundUri =
@@ -42,11 +48,9 @@ class IvocaboApplication : Application(), Configuration.Provider {
                 getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
         }
+
         super.onCreate()
     }
 
-    override fun getWorkManagerConfiguration() =
-        Configuration.Builder()
-            .setWorkerFactory(workerFactory)
-            .build()
+
 }

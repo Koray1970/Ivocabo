@@ -2,7 +2,6 @@ package com.serko.ivocabo
 
 import android.app.NotificationManager
 import android.content.Context
-import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -20,9 +19,13 @@ import com.serko.ivocabo.remote.membership.EventResultFlags
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.cancellable
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -44,92 +47,80 @@ class TrackWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         //get remote missing device list
         try {
-
             var bluetoothScanService = BluetoothScanService(_context)
 
-            if (IApiService.apiService == null)
-                IApiService.getInstance()
-            val apiSrv = IApiService.apiService
-
             var userToken = inputData.getString("usertoken")
+            if (!userToken.isNullOrEmpty()) {
 
-            //var missingDeviceList = flowOf<MutableList<String>>()
-            //get missing device list from remote
-            val call: Call<MissingDeviceListResponse> =
-                apiSrv?.srvMissingDeviceList("Bearer $userToken")!!
-            call.enqueue(object : Callback<MissingDeviceListResponse> {
-                override fun onResponse(
-                    call: Call<MissingDeviceListResponse>,
-                    response: Response<MissingDeviceListResponse>
-                ) {
-                    if (response.isSuccessful) {
-                        val rBody = response.body()!!
-                        if (rBody.eventResult.eventresultflag == EventResultFlags.SUCCESS.flag) {
-                            var locdiva = mutableListOf<String>()
-                            rBody.devicelist.forEach { diva ->
-                                locdiva.add(diva.macaddress)
-                            }
+                var getlocation = AppFusedLocationRepo(_context)
+                var lastLatLng: LatLng? = null
+                lastLatLng = getlocation.startCurrentLocation()
+                    .flowOn(Dispatchers.Default)
+                    .cancellable().first()
 
-                            bluetoothScanService.flowListOfMacaddress = flowOf(locdiva)
-                        }
-                    }
-                }
+                if (IApiService.apiService == null)
+                    IApiService.getInstance()
+                val apiSrv = IApiService.apiService
+                //get missing device list from remote
+                val call: Call<MissingDeviceListResponse> =
+                    apiSrv?.srvMissingDeviceList("Bearer $userToken")!!
+                call.enqueue(object : Callback<MissingDeviceListResponse> {
+                    override fun onResponse(
+                        call: Call<MissingDeviceListResponse>,
+                        response: Response<MissingDeviceListResponse>
+                    ) {
+                        if (response.isSuccessful) {
+                            val rBody = response.body()!!
+                            if (rBody.eventResult.eventresultflag == EventResultFlags.SUCCESS.flag) {
+                                var locdiva = mutableListOf<String>()
+                                rBody.devicelist.forEach { diva ->
+                                    locdiva.add(diva.macaddress)
+                                }
 
-                override fun onFailure(call: Call<MissingDeviceListResponse>, t: Throwable) {
-
-                }
-
-            })
-
-            bluetoothScanService.flowListOfMacaddress.flowOn(Dispatchers.Default).collect { diva ->
-                if (diva.isNotEmpty()) {
-                    bluetoothScanService.bluetoothScanner().flowOn(Dispatchers.Default)
-                        .collect { rdiva ->
-                            if (rdiva?.isNotEmpty() == true) {
-                                var getlocation = AppFusedLocationRepo(_context)
-                                var lastLatLng: LatLng? = null
-                                getlocation.startCurrentLocation().flowOn(Dispatchers.Default)
-                                    .collect { loc ->
-                                        if (loc != null) {
-                                            lastLatLng = loc
-
-                                            Log.v("TrackWork","Loc=${lastLatLng!!.latitude} - ${lastLatLng!!.longitude}")
-                                            delay(100)
-                                            getlocation.stopLocationJob.tryEmit(true)
-                                            val listofRemoteRequest =
-                                                AddBulkMissingDeviceTrakingRequest()
-                                            rdiva.forEach { rr ->
-                                                listofRemoteRequest.add(
-                                                    AddBulkMissingDeviceTrakingRequestItem(
-                                                        rr.macaddress!!,
-                                                        Trackstory(
-                                                            helper.getNOWasString(),
-                                                            loc.latitude.toString(),
-                                                            loc.longitude.toString()
-                                                        )
+                                bluetoothScanService.flowListOfMacaddress = flowOf(locdiva)
+                                /*MainScope().launch {
+                                    delay(100)
+                                    val rdiva = bluetoothScanService.bluetoothScanner()
+                                        .flowOn(Dispatchers.Default).cancellable().first()
+                                    delay(200)
+                                    bluetoothScanService.stopLocationJob.tryEmit(true)
+                                    if (rdiva != null) {
+                                        val listofRemoteRequest =
+                                            AddBulkMissingDeviceTrakingRequest()
+                                        rdiva.forEach { rr ->
+                                            listofRemoteRequest.add(
+                                                AddBulkMissingDeviceTrakingRequestItem(
+                                                    rr.macaddress!!,
+                                                    Trackstory(
+                                                        helper.getNowAsJsonString(),
+                                                        lastLatLng?.latitude.toString(),
+                                                        lastLatLng?.longitude.toString()
                                                     )
                                                 )
-                                            }
-                                            SendScanListToRemote(
-                                                apiSrv,
-                                                userToken!!,
-                                                listofRemoteRequest
                                             )
                                         }
-                                        delay(100)
-                                        bluetoothScanService.stopLocationJob.tryEmit(true)
+                                        *//*Log.v(
+                                            "TrackWork",
+                                            "listofRemoteRequest Size=${listofRemoteRequest.size}"
+                                        )*//*
+                                        SendScanListToRemote(
+                                            apiSrv,
+                                            userToken!!,
+                                            listofRemoteRequest
+                                        )
                                     }
-
+                                }*/
                             }
-                            delay(100)
-                            bluetoothScanService.stopLocationJob.tryEmit(true)
                         }
-                } else {
-                    bluetoothScanService.stopLocationJob.tryEmit(true)
-                }
+                    }
+
+                    override fun onFailure(call: Call<MissingDeviceListResponse>, t: Throwable) {
+
+                    }
+                })
             }
+        } catch (e: Exception) {
         }
-        catch (e:Exception){}
 
         return Result.success()
     }
@@ -139,6 +130,9 @@ class TrackWorker @AssistedInject constructor(
         token: String,
         listofTrack: AddBulkMissingDeviceTrakingRequest
     ) {
+        /*val gson=Gson()
+        Log.v("TrackWorker","token = $token")
+        Log.v("TrackWorker","listofTrac = ${gson.toJson(listofTrack)}")*/
         val call: Call<Void> =
             apiSrv?.srvAddBulkMissingDeviceTracking("Bearer $token", listofTrack)!!
         call.enqueue(object : Callback<Void> {

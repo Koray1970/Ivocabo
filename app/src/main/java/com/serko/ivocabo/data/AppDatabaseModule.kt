@@ -2,6 +2,7 @@ package com.serko.ivocabo.data
 
 import android.content.Context
 import androidx.room.Room
+import com.serko.ivocabo.bluetooth.BluetoothScanService
 
 import dagger.Module
 import dagger.Provides
@@ -18,5 +19,7 @@ class AppDatabaseModule {
         Room.databaseBuilder(context,AppDatabase::class.java,"ivocabodb.db").allowMainThreadQueries().fallbackToDestructiveMigration().build()
     @Provides
     fun provideUserDao(appDatabase: AppDatabase)=appDatabase.userDao()
+
+
 
 }

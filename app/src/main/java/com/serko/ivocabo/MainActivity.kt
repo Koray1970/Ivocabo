@@ -113,18 +113,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import androidx.work.Data
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.OneTimeWorkRequest
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
 import com.serko.ivocabo.api.IApiService
 import com.serko.ivocabo.bluetooth.BluetoothScanService
-import com.serko.ivocabo.bluetooth.BluetoothScannerCallbackStatus
 import com.serko.ivocabo.data.Device
 import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
@@ -146,7 +140,9 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.cancellable
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
@@ -157,8 +153,6 @@ import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.util.Locale
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 //koko
 //koko@gmail.com
@@ -166,10 +160,14 @@ import java.util.concurrent.TimeUnit
 @Suppress("DEPRECATION")
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    //private val userviewModel: userViewModel by viewModels()
+
+
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         //applicationContext.deleteDatabase("ivocabodb.db")
+
         hideSystemUI()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
@@ -179,7 +177,6 @@ class MainActivity : ComponentActivity() {
                 systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         }
-
         setContent {
             IvocaboTheme {
                 // A surface container using the 'background' color from the theme
@@ -187,16 +184,6 @@ class MainActivity : ComponentActivity() {
                 Surface(
                     modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
                 ) {
-                    var unRequest= OneTimeWorkRequestBuilder<TrackWorker>().build()
-                    WorkManager.getInstance(this).enqueue(unRequest)
-                    val periodicWorkRequest =
-                        PeriodicWorkRequestBuilder<TrackWorker>(30, TimeUnit.MINUTES).build()
-                    WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-                        "TrackMissingDevice",
-                        ExistingPeriodicWorkPolicy.KEEP,
-                        periodicWorkRequest
-                    )
-
                     val composeProgressDialogStatus = remember { mutableStateOf(false) }
                     AppNavigation(composeProgressDialogStatus)
 
@@ -230,7 +217,7 @@ val gson = Gson()
 val helper = Helper()
 
 private val dummyDevice = Device(null, "", null, "", null, null, null, null, null, null)
-
+private var bluetoothScanService:BluetoothScanService?=null
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComposeProgress(dialogshow: MutableState<Boolean>) {
@@ -273,6 +260,34 @@ fun Dashboard(
     composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
 
+    var user = userviewModel.fetchUser()
+    var tokenData: Data? = null
+    if(bluetoothScanService==null) {
+        bluetoothScanService = BluetoothScanService(context)
+    }
+    /*val workManager = WorkManager.getInstance(context)
+    var oneTimeWorkRequest: OneTimeWorkRequest? = null
+    var periodicWorkRequest: PeriodicWorkRequest? = null
+
+    if (user.token?.isNullOrEmpty() == false) {
+        tokenData = Data.Builder().putString("usertoken", user.token).build()
+        oneTimeWorkRequest = OneTimeWorkRequestBuilder<TrackWorker>()
+            .setInputData(tokenData)
+            .build()
+        workManager.enqueue(oneTimeWorkRequest)
+
+
+        LaunchedEffect(Unit) {
+            delay(3200)
+            periodicWorkRequest =
+                PeriodicWorkRequestBuilder<TrackWorker>(16, TimeUnit.MINUTES)
+                    .setInputData(tokenData!!)
+                    .build()
+            workManager.enqueue(periodicWorkRequest!!)
+        }
+
+    }*/
+
 
     val locationPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
         LocationPermission(context)
@@ -284,6 +299,7 @@ fun Dashboard(
         }
     } else {
         val scope = rememberCoroutineScope()
+
         var currentLocation by remember { mutableStateOf(LatLng(0.0, 0.0)) }
         val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
         var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
@@ -316,34 +332,27 @@ fun Dashboard(
                     }
             }
         }
-        composeProgressStatus.value = false
 
 
         val focusManager = LocalFocusManager.current
         val keyboardController = LocalSoftwareKeyboardController.current
         val tDevice = dummyDevice
-        var deviceIconlist = remember { mutableListOf<FormDeviceItem>() }
-        var selectedOption by remember { mutableStateOf<FormDeviceItem>(FormDeviceItem(0, 0, 0)) }
-        var onOptionSelected by remember { mutableStateOf<FormDeviceItem>(FormDeviceItem(0, 0, 0)) }
 
+        val deviceFormHelper = DeviceFormHelper()
+        var deviceIconlist = remember { mutableListOf<FormDeviceItem>() }
+        deviceIconlist = deviceFormHelper.FormDeviceList(context)
+
+        var (selectedOption, onOptionSelected) = remember { mutableStateOf(deviceIconlist[0]) }
 
         var deviceName by rememberSaveable { mutableStateOf(tDevice.name) }
         var deviceMacaddress by rememberSaveable { mutableStateOf(tDevice.macaddress) }
 
         val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
+        var devicelist = remember { mutableListOf<Device>() }
+        var devicelistFlowState =
+            userviewModel.getDeviceFlowList().collectAsState(initial = mutableListOf<Device>())
 
-        SideEffect {
-            userviewModel.getDbDeviceList()
-
-            //start::Device Form assets
-            val deviceFormHelper = DeviceFormHelper()
-            deviceIconlist = deviceFormHelper.FormDeviceList(context)
-            var nselecteddevice = deviceIconlist.first()
-            if (tDevice.devicetype != null)
-                nselecteddevice = deviceIconlist.first { it.id == tDevice.devicetype!! }
-            selectedOption = nselecteddevice
-            onOptionSelected = nselecteddevice
-        }
+        composeProgressStatus.value = false
         //end::Device Form assets
         Scaffold(floatingActionButton = {
             FloatingActionButton(
@@ -394,7 +403,7 @@ fun Dashboard(
                         .fillMaxSize()
                         .background(Color.Black)
                 ) {
-                    itemsIndexed(userviewModel.devicelist) { _, dd ->
+                    itemsIndexed(devicelistFlowState.value) { _, dd ->
                         var deviceDismissShow by remember { mutableStateOf(true) }
                         val deviceDismissState =
                             rememberDismissState(confirmValueChange = { dismissValue ->
@@ -536,6 +545,10 @@ fun Dashboard(
                         onValueChange = { deviceMacaddress = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text(context.getString(R.string.macaddress)) },
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Characters,
+                            autoCorrect = false
+                        ),
                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                     )
                     Spacer(modifier = Modifier.height(20.dp))
@@ -554,15 +567,15 @@ fun Dashboard(
                                     .fillMaxWidth()
                                     .height(56.dp)
                                     .selectable(
-                                        selected = (it.id == selectedOption.id),
-                                        onClick = { onOptionSelected = it },
+                                        selected = (it == selectedOption),
+                                        onClick = { onOptionSelected(it) },
                                         role = Role.RadioButton
                                     )
                                     .padding(horizontal = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 RadioButton(
-                                    selected = (it.id == selectedOption.id),
+                                    selected = (it == selectedOption),
                                     onClick = null // null recommended for accessibility with screenreaders
                                 )
                                 Text(
@@ -598,21 +611,46 @@ fun Dashboard(
                                     composeProgressStatus.value = true
                                     keyboardController!!.hide()
                                     tDevice.name = deviceName
-                                    tDevice.macaddress = deviceMacaddress
+                                    tDevice.macaddress = helper.formatedMacAddress(deviceMacaddress)
                                     tDevice.devicetype = selectedOption.id
                                     tDevice.latitude = currentLocation.latitude.toString()
                                     tDevice.longitude = currentLocation.longitude.toString()
                                     tDevice.registerdate = helper.getNOWasString()
 
                                     userviewModel.addUpdateDevice(tDevice)
+                                        .flowOn(Dispatchers.Default).cancellable()
+                                        .collect { result ->
+                                            when (result) {
+                                                null -> {
+                                                    DoNothing()
+                                                }
+
+                                                else -> {
+                                                    if (result.resultFlag.flag == 1) {
+                                                        scope.launch {
+                                                            devicelistFlowState.value.add(tDevice)
+                                                            delay(600)
+                                                            composeProgressStatus.value = false
+                                                            //delay(400)
+                                                            deviceFormScaffoldState.bottomSheetState.partialExpand()
+                                                        }
+                                                    } else {
+                                                        if (result.error != null) {
+                                                            Toast.makeText(
+                                                                context,
+                                                                "Error Code : ${result.error!!.code}, Exception : ${result.error!!.exception}",
+                                                                Toast.LENGTH_LONG
+                                                            ).show()
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
 
                                     when (obsAddEdit.value.stateStatus) {
                                         RMEventStatus.Complete -> {
                                             deviceName = ""
                                             deviceMacaddress = ""
-
-                                            selectedOption = deviceIconlist.first()
-                                            onOptionSelected = deviceIconlist.first()
 
                                             scope.launch {
                                                 if (userviewModel.devicelist.add(tDevice)) {
@@ -1183,17 +1221,13 @@ fun DeviceDashboard(
         var deviceDetail by remember { mutableStateOf<Device>(dummyDevice) }
         var chkNotificationCheckState by remember { mutableStateOf(false) }
         var chkMissingCheckState by remember { mutableStateOf(false) }
+        chkMissingCheckState = deviceDetail.ismissing ?: null == true
         val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
         var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
         val cameraState = rememberCameraState {
             geoPoint = GeoPoint(0.0, 0.0)
             zoom = 19.0 // optional, default is 5.0
         }
-
-        //track work
-        var ntfUUID by remember { mutableStateOf<UUID>(UUID.randomUUID()) }
-        var notifybluetooth: OneTimeWorkRequest? = null
-
 
         SideEffect {
             deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
@@ -1356,6 +1390,57 @@ fun DeviceDashboard(
                                         checked = chkNotificationCheckState,
                                         onCheckedChange = { cc ->
                                             //track switch onchecked
+                                            MainScope().launch {
+                                                val getloc =
+                                                    AppFusedLocationRepo(context).startCurrentLocation()
+                                                        .cancellable().first()
+                                                delay(100)
+                                                if (!cc)
+                                                    deviceDetail.istracking = null
+                                                else {
+                                                    deviceDetail.istracking = true
+                                                    deviceDetail.ismissing = null
+                                                }
+                                                deviceDetail.longitude =
+                                                    getloc.longitude.toString()
+                                                deviceDetail.latitude =
+                                                    getloc.latitude.toString()
+                                                userviewModel.addUpdateDevice(deviceDetail)
+                                                    .flowOn(Dispatchers.Default).cancellable()
+                                                    .collect { result ->
+                                                        when (result) {
+                                                            null -> {
+                                                                DoNothing()
+                                                            }
+
+                                                            else -> {
+                                                                if (result.resultFlag.flag == 1) {
+                                                                    if (cc) {
+                                                                        chkMissingCheckState = false
+                                                                        Toast.makeText(
+                                                                            context,
+                                                                            "Tracking servisi açıldı.",
+                                                                            Toast.LENGTH_LONG
+                                                                        ).show()
+                                                                    } else
+                                                                        Toast.makeText(
+                                                                            context,
+                                                                            "Tracking servisi kapatıldı.",
+                                                                            Toast.LENGTH_LONG
+                                                                        ).show()
+                                                                } else {
+                                                                    if (result.error != null) {
+                                                                        Toast.makeText(
+                                                                            context,
+                                                                            "Error : ${result.error!!.code}, Exception : ${result.error!!.exception} ",
+                                                                            Toast.LENGTH_LONG
+                                                                        ).show()
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                            }
                                             chkNotificationCheckState = cc
 
                                         },
@@ -1403,6 +1488,59 @@ fun DeviceDashboard(
                                     Switch(
                                         checked = chkMissingCheckState,
                                         onCheckedChange = {
+                                            MainScope().launch {
+                                                val getloc =
+                                                    AppFusedLocationRepo(context).startCurrentLocation()
+                                                        .cancellable().first()
+                                                delay(100)
+                                                if (!it)
+                                                    deviceDetail.ismissing = null
+                                                else {
+                                                    deviceDetail.istracking = null
+                                                    deviceDetail.ismissing = true
+                                                }
+                                                deviceDetail.longitude =
+                                                    getloc.longitude.toString()
+                                                deviceDetail.latitude =
+                                                    getloc.latitude.toString()
+                                                userviewModel.addUpdateDevice(deviceDetail)
+                                                    .flowOn(Dispatchers.Default).cancellable()
+                                                    .collect { result ->
+                                                        when (result) {
+                                                            null -> {
+                                                                DoNothing()
+                                                            }
+
+                                                            else -> {
+                                                                if (result.resultFlag.flag == 1) {
+                                                                    if (it) {
+                                                                        chkNotificationCheckState =
+                                                                            false
+                                                                        Toast.makeText(
+                                                                            context,
+                                                                            "Missing Listesine Eklendi",
+                                                                            Toast.LENGTH_LONG
+                                                                        ).show()
+                                                                    } else
+                                                                        Toast.makeText(
+                                                                            context,
+                                                                            "Missing Listesinden Çıkarıldı",
+                                                                            Toast.LENGTH_LONG
+                                                                        ).show()
+                                                                } else {
+                                                                    if (result.error != null) {
+                                                                        Toast.makeText(
+                                                                            context,
+                                                                            "Error : ${result.error!!.code}, Exception : ${result.error!!.exception} ",
+                                                                            Toast.LENGTH_LONG
+                                                                        ).show()
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                            }
+
                                             chkMissingCheckState = it
                                         },
                                         thumbContent = if (chkMissingCheckState) {
@@ -1433,7 +1571,7 @@ fun DeviceDashboard(
     }
 }
 
-private lateinit var bluetoothScanService: BluetoothScanService
+
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -1487,51 +1625,46 @@ fun FindMyDevice(
                 defaultMetricTextStyle
             )
         }
-
-        bluetoothScanService = BluetoothScanService(context)
-        bluetoothScanService.flowListOfMacaddress = flowOf(listofMacaddress)
+        var disconnectedCounter = 0
+        if(bluetoothScanService==null) {
+            bluetoothScanService = BluetoothScanService(context)
+        }
+        bluetoothScanService!!.flowListOfMacaddress = flowOf(listofMacaddress)
 
         LaunchedEffect(Unit) {
             delay(100)
-            bluetoothScanService.bluetoothScanner().flowOn(Dispatchers.Default).collect { d ->
-                if (d == null) {
-                    val notify = AppNotification(
-                        context,
-                        NotifyItem(deviceDetail, "Title", "Summary", "Context")
-                    )
-                    if (composeProgressStatus.value)
-                        composeProgressStatus.value = false
-                    metricDistance = context.getString(R.string.devicecannotbereached)
-                } else {
-                    var rtl = d.first { g -> g.macaddress == _macaddress }
-                    when (rtl.callbackStatus) {
-                        BluetoothScannerCallbackStatus.DEVICE_NOT_FOUND -> {
-                            val notify = AppNotification(
-                                context,
-                                NotifyItem(deviceDetail, "Title", "Summary", "Context")
-                            )
-                            if (composeProgressStatus.value)
-                                composeProgressStatus.value = false
-                            metricDistance = context.getString(R.string.devicecannotbereached)
-                        }
-
-                        BluetoothScannerCallbackStatus.CONNECTING -> {
+            bluetoothScanService!!.setScanList()
+            delay(100)
+            bluetoothScanService!!.bluetoothScannerStart()
+            composeProgressStatus.value = true
+            metricDistanceTextStyle = scanningMetricTextStyle
+            metricDistance = context.getString(R.string.scanning)
+            /*val notify = AppNotification(
+                context,
+                NotifyItem(deviceDetail, "Title", "Summary", "Context")
+            )*/
+            bluetoothScanService!!.resultList.flowOn(Dispatchers.Default).cancellable()
+                .collect { r ->
+                    if (!r.isNullOrEmpty()) {
+                        var dvScanResult = r.first { a -> a.macaddress == _macaddress }
+                        if (dvScanResult != null) {
+                            disconnectedCounter = 0
                             metricDistanceTextStyle = defaultMetricTextStyle
                             if (composeProgressStatus.value)
                                 composeProgressStatus.value = false
                             metricDistance =
-                                helper.CalculateRSSIToMeter(rtl.rssi)
+                                helper.CalculateRSSIToMeter(dvScanResult.rssi)
                                     .toString() + "mt"
-                        }
-
-                        else -> {
-                            composeProgressStatus.value = true
-                            metricDistanceTextStyle = scanningMetricTextStyle
-                            metricDistance = context.getString(R.string.scanning)
+                        } else {
+                            disconnectedCounter = disconnectedCounter + 1
+                            if (disconnectedCounter >= 10) {
+                                metricDistanceTextStyle = scanningMetricTextStyle
+                                metricDistance = context.getString(R.string.devicecannotbereached)
+                            }
                         }
                     }
+
                 }
-            }
         }
         Scaffold(
             floatingActionButton = {
@@ -1540,7 +1673,6 @@ fun FindMyDevice(
                     shape = CircleShape,
                     onClick = {
                         MainScope().launch {
-                            bluetoothScanService.stopLocationJob = MutableStateFlow<Boolean>(true)
                             delay(300)
                             navController.navigate("devicedashboard/${deviceDetail.macaddress}")
                         }
@@ -1692,50 +1824,43 @@ fun TrackMyDevice(
             }
 
 
-            bluetoothScanService = BluetoothScanService(context)
-            bluetoothScanService.flowListOfMacaddress = flowOf(listofMacaddress)
+            var disconnectedCounter = 0
+            if(bluetoothScanService==null) {
+                bluetoothScanService = BluetoothScanService(context)
+            }
+            bluetoothScanService!!.flowListOfMacaddress = flowOf(listofMacaddress)
 
             LaunchedEffect(Unit) {
                 delay(100)
-                bluetoothScanService.bluetoothScanner().flowOn(Dispatchers.Default).collect { d ->
-                    if (d == null) {
-                        val notify = AppNotification(
-                            context,
-                            NotifyItem(deviceDetail, "Title", "Summary", "Context")
-                        )
-                        if (composeProgressStatus.value)
-                            composeProgressStatus.value = false
-                        metricDistance = context.getString(R.string.devicecannotbereached)
-                    } else {
-                        var rtl = d.first { g -> g.macaddress == _macaddress }
-                        when (rtl.callbackStatus) {
-                            BluetoothScannerCallbackStatus.DEVICE_NOT_FOUND -> {
-                                val notify = AppNotification(
-                                    context,
-                                    NotifyItem(deviceDetail, "Title", "Summary", "Context")
-                                )
-                                if (composeProgressStatus.value)
-                                    composeProgressStatus.value = false
-                                metricDistance = context.getString(R.string.devicecannotbereached)
-                            }
-
-                            BluetoothScannerCallbackStatus.CONNECTING -> {
+                composeProgressStatus.value = true
+                metricDistanceTextStyle = scanningMetricTextStyle
+                metricDistance = context.getString(R.string.scanning)
+                /*val notify = AppNotification(
+                    context,
+                    NotifyItem(deviceDetail, "Title", "Summary", "Context")
+                )*/
+                bluetoothScanService!!.resultList.flowOn(Dispatchers.Default).cancellable()
+                    .collect { r ->
+                        if (!r.isNullOrEmpty()) {
+                            var dvScanResult = r.first { a -> a.macaddress == _macaddress }
+                            if (dvScanResult != null) {
+                                disconnectedCounter = 0
                                 metricDistanceTextStyle = defaultMetricTextStyle
                                 if (composeProgressStatus.value)
                                     composeProgressStatus.value = false
                                 metricDistance =
-                                    helper.CalculateRSSIToMeter(rtl.rssi)
+                                    helper.CalculateRSSIToMeter(dvScanResult.rssi)
                                         .toString() + "mt"
-                            }
-
-                            else -> {
-                                composeProgressStatus.value = true
-                                metricDistanceTextStyle = scanningMetricTextStyle
-                                metricDistance = context.getString(R.string.scanning)
+                            } else {
+                                disconnectedCounter = disconnectedCounter + 1
+                                if (disconnectedCounter >= 10) {
+                                    metricDistanceTextStyle = scanningMetricTextStyle
+                                    metricDistance = context.getString(R.string.devicecannotbereached)
+                                }
                             }
                         }
+
                     }
-                }
             }
 
             Scaffold(
@@ -1745,8 +1870,7 @@ fun TrackMyDevice(
                         shape = CircleShape,
                         onClick = {
                             MainScope().launch {
-                                bluetoothScanService.stopLocationJob =
-                                    MutableStateFlow<Boolean>(true)
+
                                 delay(300)
                                 navController.navigate("devicedashboard/${deviceDetail.macaddress}")
                             }

@@ -2,6 +2,10 @@ package com.serko.ivocabo.data
 
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
+import android.util.Log
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.toMutableStateList
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -32,12 +36,17 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 @Entity(tableName = "users")
@@ -133,6 +142,7 @@ class userViewModel @Inject constructor(
     var user: User?
     var isUserSignIn = MutableStateFlow(false)
     var devicelist = mutableListOf<Device>()
+
     var mutablelivedataRMEventResult =
         MutableStateFlow<RMEventResult<Boolean>>(RMEventResult(false))
 
@@ -185,6 +195,25 @@ class userViewModel @Inject constructor(
     }
 
     //device events
+    fun getDeviceFlowList(): Flow<SnapshotStateList<Device>> = callbackFlow {
+        viewModelScope.launch {
+
+            var dbdevices = repo.getDevices()
+            if (dbdevices != null) {
+                if (dbdevices.isNotEmpty()) {
+                    trySend(
+                        gson.fromJson<List<Device>>(
+                            dbdevices,
+                            object : TypeToken<List<Device>>() {}.type
+                        ).toMutableStateList()
+                    )
+                }
+            }
+        }
+        awaitClose()
+    }
+
+
     fun getDbDeviceList() {
         try {
             var dbdevices = repo.getDevices()
@@ -200,8 +229,9 @@ class userViewModel @Inject constructor(
 
         }
     }
-    fun getDeviceDetail(macaddress:String):Device?{
-        try{
+
+    fun getDeviceDetail(macaddress: String): Device? {
+        try {
             val dDevicecol = repo.getDevices()
             if (dDevicecol != null) {
                 if (dDevicecol.length > 0) {
@@ -209,124 +239,127 @@ class userViewModel @Inject constructor(
                         dDevicecol,
                         object : TypeToken<List<Device>>() {}.type
                     )
-                    if(listOfDevice.any{ a->a.macaddress==macaddress }){
-                        return  listOfDevice.first { a->a.macaddress==macaddress }
+                    if (listOfDevice.any { a -> a.macaddress == macaddress }) {
+                        return listOfDevice.first { a -> a.macaddress == macaddress }
                     }
                 }
             }
-        }
-        catch (e:Exception){
+        } catch (e: Exception) {
 
         }
         return null
     }
 
-    fun addUpdateDevice(device: Device) {
-        viewModelScope.launch {
-            var funResult = FormActionResult<Boolean>(false)
-            var rmEventResult = RMEventResult<Boolean>(false)
-            rmEventResult.stateStatus = RMEventStatus.Initial
-            mutablelivedataRMEventResult.emit(rmEventResult)
-            try {
-                if (BluetoothAdapter.checkBluetoothAddress(helper.formatedMacAddress(device.macaddress))) {
-                    user = repo.fetchUser()
-                    if (!user!!.devices.isNullOrBlank()) {
-                        var gDeviceList =
-                            gson.fromJson<ArrayList<Device>>(
-                                user!!.devices,
-                                object : TypeToken<ArrayList<Device>>() {}.type
-                            )
-                        var currentDevice =
-                            gDeviceList!!.find { it.macaddress == device.macaddress }
-                        if (currentDevice != null) {
-                            gDeviceList.remove(currentDevice)
-                            gDeviceList.add(device)
-                            user!!.devices = gson.toJson(gDeviceList)
-                        } else {
-                            gDeviceList.add(device)
-                            user!!.devices = gson.toJson(gDeviceList)
-                        }
+    fun addUpdateDevice(device: Device): Flow<FormActionResult<Boolean>?> = callbackFlow {
+
+        var funResult: FormActionResult<Boolean>? = null
+
+        try {
+            if (BluetoothAdapter.checkBluetoothAddress(helper.formatedMacAddress(device.macaddress))) {
+                user = repo.fetchUser()
+                if (!user!!.devices.isNullOrBlank()) {
+                    var gDeviceList =
+                        gson.fromJson<ArrayList<Device>>(
+                            user!!.devices,
+                            object : TypeToken<ArrayList<Device>>() {}.type
+                        )
+                    var currentDevice =
+                        gDeviceList!!.find { it.macaddress == device.macaddress }
+                    if (currentDevice != null) {
+                        gDeviceList.remove(currentDevice)
+                        gDeviceList.add(device)
+                        user!!.devices = gson.toJson(gDeviceList)
                     } else {
-                        var dList = ArrayList<Device>()
-                        dList.add(device)
-                        user!!.devices = gson.toJson(dList)
+                        gDeviceList.add(device)
+                        user!!.devices = gson.toJson(gDeviceList)
                     }
-                    repo.updateUser(user!!)
-                    rmEventResult.stateStatus = RMEventStatus.Running
-                    mutablelivedataRMEventResult.emit(rmEventResult)
-                    //device to remote db
-                    if (IApiService.apiService == null)
-                        IApiService.getInstance()
-                    val apiSrv = IApiService.apiService
-
-                    val dEviceRequest = DeviceAddUpdateRequest(
-                        null, device.devicetype, device.ismissing,
-                        device.istracking, device.latitude, device.longitude,
-                        device.macaddress, device.name, device.newmacaddress
-                    )
-                    val call: Call<EventResult> =
-                        apiSrv?.srvAddUpdateDevice("Bearer ${user?.token!!} ", dEviceRequest)!!
-                    call.enqueue(object : Callback<EventResult> {
-                        override fun onResponse(
-                            call: Call<EventResult>,
-                            response: Response<EventResult>
-                        ) {
-                            if (response.isSuccessful) {
-                                if (response.body()?.eventresultflag == EventResultFlags.SUCCESS.flag) {
-                                    getDbDeviceList()
-                                    funResult.result = true
-                                    funResult.resultFlag = FormActionResultFlag.Success
-                                } else {
-                                    funResult.error = FormActionError()
-                                    var eMessage = ""
-                                    when (funResult.error?.code) {
-                                        "DR015" -> eMessage = context.getString(R.string.DR015)
-                                        "DR015.3" -> eMessage = context.getString(R.string.DR015_3)
-                                        "DR015.2" -> eMessage = context.getString(R.string.DR015_2)
-                                        "DR018" -> eMessage = context.getString(R.string.DR018)
-                                        "DR017" -> eMessage = context.getString(R.string.DR017)
-                                        "DR013" -> eMessage = context.getString(R.string.DR013)
-                                        else -> eMessage = funResult.error?.exception.toString()
-                                    }
-                                    funResult.error?.code = funResult.error?.code
-                                    funResult.error?.exception = eMessage
-                                }
-                                viewModelScope.launch {
-                                    rmEventResult.formEventResult = funResult
-                                    rmEventResult.stateStatus = RMEventStatus.Complete
-                                    mutablelivedataRMEventResult.emit(rmEventResult)
-                                }
-                            }
-                        }
-
-                        override fun onFailure(call: Call<EventResult>, t: Throwable) {
-                            viewModelScope.launch {
-                                rmEventResult.stateStatus = RMEventStatus.Complete
-                                funResult.error = FormActionError()
-                                funResult.error?.exception = "Web Api bağlantı sorunu!"
-                                rmEventResult.formEventResult = funResult
-                                mutablelivedataRMEventResult.emit(rmEventResult)
-                            }
-                        }
-
-                    })
                 } else {
-                    funResult.error = FormActionError()
-                    funResult.error?.code = "mac001"
-                    funResult.error?.exception = context.getString(R.string.mac001)
-                    rmEventResult.formEventResult = funResult
-                    rmEventResult.stateStatus = RMEventStatus.Complete
-                    mutablelivedataRMEventResult.emit(rmEventResult)
+                    var dList = ArrayList<Device>()
+                    dList.add(device)
+                    user!!.devices = gson.toJson(dList)
                 }
-            } catch (e: Exception) {
-                funResult.error = FormActionError()
-                funResult.error?.code = "000UVM001"
-                funResult.error?.exception = e.message
-                rmEventResult.formEventResult = funResult
-                rmEventResult.stateStatus = RMEventStatus.Exception
-                mutablelivedataRMEventResult.emit(rmEventResult)
+                repo.updateUser(user!!)
+
+                //device to remote db
+                if (IApiService.apiService == null)
+                    IApiService.getInstance()
+                val apiSrv = IApiService.apiService
+
+                val dEviceRequest = DeviceAddUpdateRequest(
+                    date = helper.getNowAsJsonString(),
+                    description = null,
+                    devicetype = device.devicetype,
+                    ismissing = device.ismissing,
+                    istracking = device.istracking,
+                    latitude = device.latitude,
+                    longitude = device.longitude,
+                    macaddress = device.macaddress.uppercase(Locale.ROOT),
+                    name = device.name,
+                    newmacaddress = device.newmacaddress
+                )
+                //Log.v("MainActivity", "${gson.toJson(dEviceRequest)}")
+                val call: Call<EventResult> =
+                    apiSrv?.srvAddUpdateDevice("Bearer ${user?.token!!} ", dEviceRequest)!!
+                call.enqueue(object : Callback<EventResult> {
+                    override fun onResponse(
+                        call: Call<EventResult>,
+                        response: Response<EventResult>
+                    ) {
+                        //Log.v("MainActivity","remote Response : ${response.raw().code}")
+                        if (response.isSuccessful) {
+
+                            if (response.body()?.eventresultflag == EventResultFlags.SUCCESS.flag) {
+
+                                funResult = FormActionResult<Boolean>(true)
+                                funResult?.resultFlag = FormActionResultFlag.Success
+                                trySend(funResult)
+                            } else {
+                                funResult = FormActionResult<Boolean>(false)
+                                funResult?.error = FormActionError()
+                                var eMessage = ""
+                                when (funResult?.error!!.code) {
+                                    "DR015" -> eMessage = context.getString(R.string.DR015)
+                                    "DR015.3" -> eMessage = context.getString(R.string.DR015_3)
+                                    "DR015.2" -> eMessage = context.getString(R.string.DR015_2)
+                                    "DR018" -> eMessage = context.getString(R.string.DR018)
+                                    "DR017" -> eMessage = context.getString(R.string.DR017)
+                                    "DR013" -> eMessage = context.getString(R.string.DR013)
+                                    else -> eMessage = funResult?.error!!.exception.toString()
+                                }
+                                funResult?.error?.code = response.body()?.error!!.code
+                                funResult?.error?.exception = eMessage
+                                trySend(funResult)
+                            }
+
+                        }
+                    }
+
+                    override fun onFailure(call: Call<EventResult>, t: Throwable) {
+                        Log.v("MainActivity", "t : ${t.message}")
+                        funResult = FormActionResult<Boolean>(false)
+                        funResult?.error = FormActionError()
+                        funResult?.error?.exception = "Web Api bağlantı sorunu!"
+                        trySend(funResult)
+                    }
+
+                })
+            } else {
+                funResult = FormActionResult<Boolean>(false)
+                funResult?.error = FormActionError()
+                funResult?.error?.code = "mac001"
+                funResult?.error?.exception = context.getString(R.string.mac001)
+                trySend(funResult)
             }
+        } catch (e: Exception) {
+            funResult = FormActionResult<Boolean>(false)
+            funResult?.error = FormActionError()
+            funResult?.error?.code = "000UVM001"
+            funResult?.error?.exception = e.message
+            trySend(funResult)
         }
+
+        delay(100)
+        awaitClose()
     }
 
     fun DeleteDevice(device: Device) {
@@ -372,15 +405,7 @@ class userViewModel @Inject constructor(
             }
         }
     }
-    /*companion object {
-        val Factory: ViewModelProvider.Factory = viewModelFactory {
-            initializer {
-                val context = (this[APPLICATION_KEY] as IvocaboApplication).context
-                val repo = (this[APPLICATION_KEY] as IvocaboApplication).userRespo
-                userViewModel(context, repo)
-            }
-        }
-    }*/
+
 }
 
 enum class RMEventStatus { Initial, Running, Complete, Exception }

@@ -1,6 +1,7 @@
 package com.serko.ivocabo.remote.device.addupdate
 
 data class DeviceAddUpdateRequest(
+    val date:String?,
     val description: String?,
     val devicetype: Int?,
     val ismissing: Boolean?,
