@@ -1,9 +1,14 @@
 package com.serko.ivocabo
 
 import android.app.NotificationManager
+import android.bluetooth.le.ScanFilter
 import android.content.Context
+import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.ForegroundInfo
+import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
@@ -29,6 +34,8 @@ import kotlinx.coroutines.launch
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.util.Locale
+import kotlin.math.roundToInt
 
 @HiltWorker
 class TrackWorker @AssistedInject constructor(
@@ -36,88 +43,74 @@ class TrackWorker @AssistedInject constructor(
     @Assisted parameters: WorkerParameters
 ) :
     CoroutineWorker(context, parameters) {
-    private val gson = Gson()
-    private val notificationManager: NotificationManager =
-        context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    private lateinit var bluetoothScanService: BluetoothScanService
-    private val channelID = "ivoNotification"
-    private val _context = context
-    private var device: Device? = null
-    private val helper = Helper()
+    val _context = context
     override suspend fun doWork(): Result {
         //get remote missing device list
         try {
-            var bluetoothScanService = BluetoothScanService(_context)
+            var dataMacaddress = inputData.getString("macaddress")
+            if (!dataMacaddress.isNullOrEmpty()) {
+                dataMacaddress = dataMacaddress.uppercase(Locale.ROOT)
+                setForeground(createForegroundInfo(String.format(applicationContext.getString(R.string.ntf_scanning),dataMacaddress)))
 
-            var userToken = inputData.getString("usertoken")
-            if (!userToken.isNullOrEmpty()) {
+                val bluetoothScanService = BluetoothScanService(_context)
 
-                var getlocation = AppFusedLocationRepo(_context)
-                var lastLatLng: LatLng? = null
-                lastLatLng = getlocation.startCurrentLocation()
-                    .flowOn(Dispatchers.Default)
-                    .cancellable().first()
+                //start::set scan list
+                if (bluetoothScanService.scanList.isNotEmpty()) {
+                    if (bluetoothScanService.scanList.none { a -> a.deviceAddress == dataMacaddress }) {
+                        bluetoothScanService.scanList.add(
+                            ScanFilter.Builder().setDeviceAddress(dataMacaddress).build()
+                        )
+                    }
+                } else {
+                    bluetoothScanService.scanList.add(
+                        ScanFilter.Builder().setDeviceAddress(dataMacaddress).build()
+                    )
+                }
+                //end::set scan list
+                delay(100)
+                if (!bluetoothScanService.scanJonState.value)
+                    bluetoothScanService.scanJonState.tryEmit(true)
 
-                if (IApiService.apiService == null)
-                    IApiService.getInstance()
-                val apiSrv = IApiService.apiService
-                //get missing device list from remote
-                val call: Call<MissingDeviceListResponse> =
-                    apiSrv?.srvMissingDeviceList("Bearer $userToken")!!
-                call.enqueue(object : Callback<MissingDeviceListResponse> {
-                    override fun onResponse(
-                        call: Call<MissingDeviceListResponse>,
-                        response: Response<MissingDeviceListResponse>
-                    ) {
-                        if (response.isSuccessful) {
-                            val rBody = response.body()!!
-                            if (rBody.eventResult.eventresultflag == EventResultFlags.SUCCESS.flag) {
-                                var locdiva = mutableListOf<String>()
-                                rBody.devicelist.forEach { diva ->
-                                    locdiva.add(diva.macaddress)
+                delay(200)
+                var disconnectedCounter=0
+                val disconnectedContent=String.format(applicationContext.getString(R.string.ntf_summary),dataMacaddress)
+                val stillconnectedContent=String.format(applicationContext.getString(R.string.ntf_bigtextstillconnected),dataMacaddress)
+                bluetoothScanService.bluetoothScannerResults().flowOn(Dispatchers.Default).cancellable()
+                    .collect{rlt->
+                        if (!rlt.isNullOrEmpty()) {
+                            when (rlt.size) {
+                                1 -> {
+                                    var dvScanResult = rlt.first { a -> a.macaddress == dataMacaddress }
+                                    if (dvScanResult == null) {
+                                        disconnectedCounter = disconnectedCounter + 1
+                                        if (disconnectedCounter >= 10) {
+                                            setForeground(createForegroundInfo(disconnectedContent))
+
+                                            //device can not be reached
+                                        }
+                                    }
+                                    else {
+                                        disconnectedCounter = 0
+                                        setForeground(createForegroundInfo(stillconnectedContent))
+                                    }
                                 }
 
-                                bluetoothScanService.flowListOfMacaddress = flowOf(locdiva)
-                                /*MainScope().launch {
-                                    delay(100)
-                                    val rdiva = bluetoothScanService.bluetoothScanner()
-                                        .flowOn(Dispatchers.Default).cancellable().first()
-                                    delay(200)
-                                    bluetoothScanService.stopLocationJob.tryEmit(true)
-                                    if (rdiva != null) {
-                                        val listofRemoteRequest =
-                                            AddBulkMissingDeviceTrakingRequest()
-                                        rdiva.forEach { rr ->
-                                            listofRemoteRequest.add(
-                                                AddBulkMissingDeviceTrakingRequestItem(
-                                                    rr.macaddress!!,
-                                                    Trackstory(
-                                                        helper.getNowAsJsonString(),
-                                                        lastLatLng?.latitude.toString(),
-                                                        lastLatLng?.longitude.toString()
-                                                    )
-                                                )
-                                            )
-                                        }
-                                        *//*Log.v(
-                                            "TrackWork",
-                                            "listofRemoteRequest Size=${listofRemoteRequest.size}"
-                                        )*//*
-                                        SendScanListToRemote(
-                                            apiSrv,
-                                            userToken!!,
-                                            listofRemoteRequest
-                                        )
+                                else -> {
+                                    disconnectedCounter = disconnectedCounter + 1
+                                    if (disconnectedCounter >= 10) {
+                                        //device can not be reached
+                                        setForeground(createForegroundInfo(disconnectedContent))
                                     }
-                                }*/
+                                }
+                            }
+                        } else {
+                            disconnectedCounter = disconnectedCounter + 1
+                            if (disconnectedCounter >= 10) {
+                                //device can not be reached
+                                setForeground(createForegroundInfo(disconnectedContent))
                             }
                         }
                     }
-
-                    override fun onFailure(call: Call<MissingDeviceListResponse>, t: Throwable) {
-
-                    }
-                })
             }
         } catch (e: Exception) {
         }
@@ -125,27 +118,27 @@ class TrackWorker @AssistedInject constructor(
         return Result.success()
     }
 
-    fun SendScanListToRemote(
-        apiSrv: IApiService,
-        token: String,
-        listofTrack: AddBulkMissingDeviceTrakingRequest
-    ) {
-        /*val gson=Gson()
-        Log.v("TrackWorker","token = $token")
-        Log.v("TrackWorker","listofTrac = ${gson.toJson(listofTrack)}")*/
-        val call: Call<Void> =
-            apiSrv?.srvAddBulkMissingDeviceTracking("Bearer $token", listofTrack)!!
-        call.enqueue(object : Callback<Void> {
-            override fun onResponse(
-                call: Call<Void>,
-                response: Response<Void>
-            ) {
-                if (response.isSuccessful) {
-                }
-            }
+    private fun createForegroundInfo(content: String): ForegroundInfo {
+        val id = "ivoNotification"
+        val notificationId=Math.random().roundToInt()
+        val title = applicationContext.getString(R.string.ntf_title)
+        val cancel = applicationContext.getString(R.string.cancel)
+        var content=content
+        // This PendingIntent can be used to cancel the worker
+        val intent = WorkManager.getInstance(applicationContext)
+            .createCancelPendingIntent(getId())
 
-            override fun onFailure(call: Call<Void>, t: Throwable) {}
-        })
+        val notification = NotificationCompat.Builder(applicationContext, id)
+            .setContentTitle(title)
+            .setTicker(title)
+            .setContentText(content)
+            .setSmallIcon(R.drawable.baseline_track_changes_24)
+            .setOngoing(true)
+            // Add the cancel action to the notification which can
+            // be used to cancel the worker
+            .addAction(android.R.drawable.ic_delete, cancel, intent)
+            .build()
+
+        return ForegroundInfo(notificationId, notification)
     }
-
 }

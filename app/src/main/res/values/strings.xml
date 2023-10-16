@@ -40,6 +40,8 @@
     <string name="ntf_title">Ivocabo Device Tracking Alert</string>
     <string name="ntf_summary">%s is not reached!</string>
     <string name="ntf_bigtext">The device named %s cannot be reached, its last lost location has been recorded.</string>
+    <string name="ntf_bigtextstillconnected">The %s device is still connected.</string>
+    <string name="ntf_scanning">The %s device is scanning...</string>
     <!--End::Notification Details-->
     <!--Start::Find My Device-->
     <string name="findmydevicetitle">Find My Device</string>
@@ -48,6 +50,7 @@
     <string name="devicename">Device Name</string>
     <string name="distancefromdevice">Distance From Device</string>
     <string name="distancefromdevicewarning">The device is within the diameter given above.</string>
+
 
     <!--End::Find My Device-->
     <!--Start::Track My Device-->

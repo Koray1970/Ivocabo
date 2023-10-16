@@ -1,6 +1,8 @@
 package com.serko.ivocabo
 
 import android.annotation.SuppressLint
+import android.bluetooth.le.ScanFilter
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -113,6 +115,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import androidx.work.Data
+import androidx.work.OneTimeWorkRequest
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.google.android.gms.maps.model.LatLng
@@ -141,9 +146,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.cancellable
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -217,7 +220,8 @@ val gson = Gson()
 val helper = Helper()
 
 private val dummyDevice = Device(null, "", null, "", null, null, null, null, null, null)
-private var bluetoothScanService:BluetoothScanService?=null
+private lateinit var bluetoothScanService: BluetoothScanService
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComposeProgress(dialogshow: MutableState<Boolean>) {
@@ -262,9 +266,9 @@ fun Dashboard(
 
     var user = userviewModel.fetchUser()
     var tokenData: Data? = null
-    if(bluetoothScanService==null) {
-        bluetoothScanService = BluetoothScanService(context)
-    }
+
+    bluetoothScanService = BluetoothScanService(context)
+
     /*val workManager = WorkManager.getInstance(context)
     var oneTimeWorkRequest: OneTimeWorkRequest? = null
     var periodicWorkRequest: PeriodicWorkRequest? = null
@@ -322,7 +326,7 @@ fun Dashboard(
                     .flowOn(Dispatchers.IO)
                     .collect { loc ->
                         if (loc != null) {
-                            currentLocation = loc!!
+                            currentLocation = loc
                             Log.v("MainActivity", "LatLng : ${gson.toJson(currentLocation)}")
                             val geopoint =
                                 GeoPoint(currentLocation.latitude, currentLocation.longitude)
@@ -339,16 +343,16 @@ fun Dashboard(
         val tDevice = dummyDevice
 
         val deviceFormHelper = DeviceFormHelper()
-        var deviceIconlist = remember { mutableListOf<FormDeviceItem>() }
+        val deviceIconlist: MutableList<FormDeviceItem>
         deviceIconlist = deviceFormHelper.FormDeviceList(context)
 
-        var (selectedOption, onOptionSelected) = remember { mutableStateOf(deviceIconlist[0]) }
+        val (selectedOption, onOptionSelected) = remember { mutableStateOf(deviceIconlist[0]) }
 
         var deviceName by rememberSaveable { mutableStateOf(tDevice.name) }
         var deviceMacaddress by rememberSaveable { mutableStateOf(tDevice.macaddress) }
 
         val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
-        var devicelist = remember { mutableListOf<Device>() }
+        //var devicelist = remember { mutableListOf<Device>() }
         var devicelistFlowState =
             userviewModel.getDeviceFlowList().collectAsState(initial = mutableListOf<Device>())
 
@@ -1249,6 +1253,16 @@ fun DeviceDashboard(
             }
         }
         //end:Map Properties
+
+        val workManager = WorkManager.getInstance(context)
+
+        var trackWorkRequest = OneTimeWorkRequestBuilder<TrackWorker>()
+            .setInputData(
+                Data.Builder().putString("macaddress", macaddress!!.uppercase(Locale.ROOT)).build()
+            )
+            .build()
+
+
         Scaffold(
             floatingActionButton = {
                 FloatingActionButton(
@@ -1395,9 +1409,11 @@ fun DeviceDashboard(
                                                     AppFusedLocationRepo(context).startCurrentLocation()
                                                         .cancellable().first()
                                                 delay(100)
-                                                if (!cc)
+                                                if (!cc) {
+                                                    workManager.cancelWorkById(trackWorkRequest.id)
                                                     deviceDetail.istracking = null
-                                                else {
+                                                } else {
+                                                    workManager.enqueue(trackWorkRequest)
                                                     deviceDetail.istracking = true
                                                     deviceDetail.ismissing = null
                                                 }
@@ -1571,7 +1587,123 @@ fun DeviceDashboard(
     }
 }
 
+val defaultMetricTextStyle = TextStyle(
+    fontWeight = FontWeight.ExtraBold,
+    fontSize = 48.sp,
+    textAlign = TextAlign.Center
+)
+val scanningMetricTextStyle = TextStyle(
+    fontWeight = FontWeight.Bold,
+    fontSize = 24.sp,
+    textAlign = TextAlign.Center,
+    color = Color.Red
+)
+var metricDistance = mutableStateOf("")
+var metricDistanceTextStyle = mutableStateOf<TextStyle>(defaultMetricTextStyle)
 
+@Composable
+fun ComposeScanResultUI(
+    context: Context,
+    macaddress: String,
+    composeProgressStatus: MutableState<Boolean>
+) {
+    metricDistance.value = context.getString(R.string.scanning)
+    var disconnectedCounter = 0
+    if (bluetoothScanService == null) {
+        bluetoothScanService = BluetoothScanService(context)
+    }
+    if (!bluetoothScanService.scanList.isNullOrEmpty()) {
+        if (bluetoothScanService.scanList.none { a -> a.deviceAddress == macaddress }) {
+            bluetoothScanService.scanList.add(
+                ScanFilter.Builder().setDeviceAddress(macaddress).build()
+            )
+        }
+    } else {
+        bluetoothScanService.scanList.add(
+            ScanFilter.Builder().setDeviceAddress(macaddress).build()
+        )
+    }
+    bluetoothScanService!!.scanJonState.tryEmit(true)
+
+
+    metricDistanceTextStyle.value = scanningMetricTextStyle
+    metricDistance.value = context.getString(R.string.scanning)
+    var cRssi by remember { mutableStateOf<Int?>(null) }
+    /*val notify = AppNotification(
+    context,
+    NotifyItem(deviceDetail, "Title", "Summary", "Context"))*/
+
+    LaunchedEffect(Unit) {
+        bluetoothScanService.bluetoothScannerResults().flowOn(Dispatchers.Default).cancellable()
+            .collect { rlt ->
+                if (!rlt.isNullOrEmpty()) {
+                    when (rlt.size) {
+                        1 -> {
+                            Log.v("MainActivity", "bluetoothScannerResults 2")
+                            var dvScanResult = rlt.first { a -> a.macaddress == macaddress }
+                            if (dvScanResult != null) {
+                                disconnectedCounter = 0
+                                metricDistanceTextStyle.value = defaultMetricTextStyle
+                                if (composeProgressStatus.value)
+                                    composeProgressStatus.value = false
+                                cRssi = dvScanResult.rssi
+                                metricDistance.value =
+                                    helper.CalculateRSSIToMeter(cRssi)
+                                        .toString() + "mt"
+                                Log.v("MainActivity", "bluetoothScannerResults 2.1")
+                            } else {
+                                disconnectedCounter = disconnectedCounter + 1
+                                Log.v("MainActivity", "bluetoothScannerResults 2.2")
+                                if (disconnectedCounter >= 10) {
+                                    cRssi = null
+                                    metricDistanceTextStyle.value = scanningMetricTextStyle
+                                    metricDistance.value =
+                                        context.getString(R.string.devicecannotbereached)
+                                    Log.v("MainActivity", "bluetoothScannerResults 2.3")
+                                } else
+                                    metricDistance.value =
+                                        helper.CalculateRSSIToMeter(cRssi)
+                                            .toString() + "mt"
+                            }
+
+                        }
+
+                        else -> {
+
+                            if (cRssi != null)
+                                metricDistance.value =
+                                    helper.CalculateRSSIToMeter(cRssi).toString() + "mt"
+                            else
+                                metricDistance.value = context.getString(R.string.scanning)
+                            disconnectedCounter = disconnectedCounter + 1
+                            Log.v("MainActivity", "bluetoothScannerResults 3")
+                            if (disconnectedCounter >= 10) {
+                                cRssi = null
+                                metricDistanceTextStyle.value = scanningMetricTextStyle
+                                metricDistance.value =
+                                    context.getString(R.string.devicecannotbereached)
+                                Log.v("MainActivity", "bluetoothScannerResults 3.1")
+                            }
+                        }
+                    }
+                } else {
+                    Log.v("MainActivity", "bluetoothScannerResults 1")
+                    if (cRssi != null)
+                        metricDistance.value = helper.CalculateRSSIToMeter(cRssi).toString() + "mt"
+                    else
+                        metricDistance.value = context.getString(R.string.scanning)
+                    disconnectedCounter = disconnectedCounter + 1
+                    if (disconnectedCounter >= 10) {
+                        cRssi = null
+                        metricDistanceTextStyle.value = scanningMetricTextStyle
+                        metricDistance.value =
+                            context.getString(R.string.devicecannotbereached)
+                        Log.v("MainActivity", "bluetoothScannerResults 1.1")
+                    }
+                }
+            }
+    }
+}
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -1595,8 +1727,8 @@ fun FindMyDevice(
         }
     } else {
         composeProgressStatus.value = true
-        //val scope = rememberCoroutineScope()
-        var metricDistance by remember { mutableStateOf(context.getString(R.string.scanning)) }
+        val scope = rememberCoroutineScope()
+
         var deviceDetail by remember { mutableStateOf(dummyDevice) }
         var deviceIcon = R.drawable.t3_icon_32
 
@@ -1606,66 +1738,13 @@ fun FindMyDevice(
             if (deviceDetail.devicetype == 2)
                 deviceIcon = R.drawable.e9_icon_32
         val _macaddress = macaddress.uppercase(Locale.ROOT)
-        val listofMacaddress = mutableListOf<String>()
-        listofMacaddress.add(_macaddress)
 
-        val defaultMetricTextStyle = TextStyle(
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 48.sp,
-            textAlign = TextAlign.Center
+        ComposeScanResultUI(
+            context,
+            _macaddress,
+            composeProgressStatus
         )
-        val scanningMetricTextStyle = TextStyle(
-            fontWeight = FontWeight.Bold,
-            fontSize = 24.sp,
-            textAlign = TextAlign.Center,
-            color = Color.Red
-        )
-        var metricDistanceTextStyle by remember {
-            mutableStateOf<TextStyle>(
-                defaultMetricTextStyle
-            )
-        }
-        var disconnectedCounter = 0
-        if(bluetoothScanService==null) {
-            bluetoothScanService = BluetoothScanService(context)
-        }
-        bluetoothScanService!!.flowListOfMacaddress = flowOf(listofMacaddress)
 
-        LaunchedEffect(Unit) {
-            delay(100)
-            bluetoothScanService!!.setScanList()
-            delay(100)
-            bluetoothScanService!!.bluetoothScannerStart()
-            composeProgressStatus.value = true
-            metricDistanceTextStyle = scanningMetricTextStyle
-            metricDistance = context.getString(R.string.scanning)
-            /*val notify = AppNotification(
-                context,
-                NotifyItem(deviceDetail, "Title", "Summary", "Context")
-            )*/
-            bluetoothScanService!!.resultList.flowOn(Dispatchers.Default).cancellable()
-                .collect { r ->
-                    if (!r.isNullOrEmpty()) {
-                        var dvScanResult = r.first { a -> a.macaddress == _macaddress }
-                        if (dvScanResult != null) {
-                            disconnectedCounter = 0
-                            metricDistanceTextStyle = defaultMetricTextStyle
-                            if (composeProgressStatus.value)
-                                composeProgressStatus.value = false
-                            metricDistance =
-                                helper.CalculateRSSIToMeter(dvScanResult.rssi)
-                                    .toString() + "mt"
-                        } else {
-                            disconnectedCounter = disconnectedCounter + 1
-                            if (disconnectedCounter >= 10) {
-                                metricDistanceTextStyle = scanningMetricTextStyle
-                                metricDistance = context.getString(R.string.devicecannotbereached)
-                            }
-                        }
-                    }
-
-                }
-        }
         Scaffold(
             floatingActionButton = {
                 FloatingActionButton(
@@ -1693,6 +1772,7 @@ fun FindMyDevice(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
+
                 Text(
                     text = context.getString(R.string.findmydevicetitle),
                     style = TextStyle(
@@ -1739,11 +1819,11 @@ fun FindMyDevice(
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp)
                     )
                     Text(
-                        text = metricDistance,
+                        text = metricDistance.value,
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(1.dp, Color.DarkGray),
-                        style = metricDistanceTextStyle
+                        style = metricDistanceTextStyle.value
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -1793,7 +1873,6 @@ fun TrackMyDevice(
         } else {
             composeProgressStatus.value = true
             //val scope = rememberCoroutineScope()
-            var metricDistance by remember { mutableStateOf(context.getString(R.string.scanning)) }
             var deviceDetail by remember { mutableStateOf(dummyDevice) }
             var deviceIcon = R.drawable.t3_icon_32
 
@@ -1803,65 +1882,11 @@ fun TrackMyDevice(
                 if (deviceDetail.devicetype == 2)
                     deviceIcon = R.drawable.e9_icon_32
             val _macaddress = macaddress.uppercase(Locale.ROOT)
-            val listofMacaddress = mutableListOf<String>()
-            listofMacaddress.add(_macaddress)
-
-            val defaultMetricTextStyle = TextStyle(
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 48.sp,
-                textAlign = TextAlign.Center
+            ComposeScanResultUI(
+                context = context,
+                macaddress = _macaddress,
+                composeProgressStatus = composeProgressStatus
             )
-            val scanningMetricTextStyle = TextStyle(
-                fontWeight = FontWeight.Bold,
-                fontSize = 24.sp,
-                textAlign = TextAlign.Center,
-                color = Color.Red
-            )
-            var metricDistanceTextStyle by remember {
-                mutableStateOf<TextStyle>(
-                    defaultMetricTextStyle
-                )
-            }
-
-
-            var disconnectedCounter = 0
-            if(bluetoothScanService==null) {
-                bluetoothScanService = BluetoothScanService(context)
-            }
-            bluetoothScanService!!.flowListOfMacaddress = flowOf(listofMacaddress)
-
-            LaunchedEffect(Unit) {
-                delay(100)
-                composeProgressStatus.value = true
-                metricDistanceTextStyle = scanningMetricTextStyle
-                metricDistance = context.getString(R.string.scanning)
-                /*val notify = AppNotification(
-                    context,
-                    NotifyItem(deviceDetail, "Title", "Summary", "Context")
-                )*/
-                bluetoothScanService!!.resultList.flowOn(Dispatchers.Default).cancellable()
-                    .collect { r ->
-                        if (!r.isNullOrEmpty()) {
-                            var dvScanResult = r.first { a -> a.macaddress == _macaddress }
-                            if (dvScanResult != null) {
-                                disconnectedCounter = 0
-                                metricDistanceTextStyle = defaultMetricTextStyle
-                                if (composeProgressStatus.value)
-                                    composeProgressStatus.value = false
-                                metricDistance =
-                                    helper.CalculateRSSIToMeter(dvScanResult.rssi)
-                                        .toString() + "mt"
-                            } else {
-                                disconnectedCounter = disconnectedCounter + 1
-                                if (disconnectedCounter >= 10) {
-                                    metricDistanceTextStyle = scanningMetricTextStyle
-                                    metricDistance = context.getString(R.string.devicecannotbereached)
-                                }
-                            }
-                        }
-
-                    }
-            }
 
             Scaffold(
                 floatingActionButton = {
@@ -1869,6 +1894,7 @@ fun TrackMyDevice(
                         containerColor = Color.Green,
                         shape = CircleShape,
                         onClick = {
+                            bluetoothScanService.scanJonState.tryEmit(true)
                             MainScope().launch {
 
                                 delay(300)
@@ -1937,11 +1963,11 @@ fun TrackMyDevice(
                             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp)
                         )
                         Text(
-                            text = metricDistance,
+                            text = metricDistance.value,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .border(1.dp, Color.DarkGray),
-                            style = metricDistanceTextStyle
+                            style = metricDistanceTextStyle.value
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
@@ -1965,7 +1991,7 @@ fun TrackMyDevice(
 /*@Preview(showBackground = true)
 @Composable
 fun RegisterPreview() {
-    IvocaboTheme {
-        Signup(navController)
-    }
+IvocaboTheme {
+Signup(navController)
+}
 }*/

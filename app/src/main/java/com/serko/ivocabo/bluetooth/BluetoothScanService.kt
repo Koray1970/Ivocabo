@@ -22,6 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.cancellable
 import kotlinx.coroutines.flow.first
@@ -50,134 +51,94 @@ data class BluetoothScannerBatchResult(
 )
 
 interface IBluetoothScanService {
-    fun bluetoothScannerStart()
+    //fun bluetoothScannerStart()
 
-    //fun bluetoothScannerResults(): Flow<MutableList<BluetoothScannerBatchResult>?>
-    fun bluetoothScannerStop()
+    fun bluetoothScannerResults(): Flow<MutableList<BluetoothScannerBatchResult>?>
+    //fun bluetoothScannerStop()
 }
 
 @Singleton
 class BluetoothScanService @Inject constructor(@ApplicationContext private val context: Context) :
     IBluetoothScanService {
     private val gson = Gson()
-    var stopLocationJob = MutableStateFlow<Boolean>(false)
-    var flowListOfMacaddress = flowOf<MutableList<String>>()
+    var scanJonState = MutableStateFlow<Boolean>(false)
+    var scanList = mutableListOf<ScanFilter>()
 
-    //var listOfMacaddress = mutableListOf<String>()
-    private val bluetoothManager: BluetoothManager =
+    private var bluetoothManager: BluetoothManager =
         context.getSystemService(BluetoothManager::class.java)
     private var bluetoothAdapter: BluetoothAdapter? = null
     private lateinit var bluetoothLeScanner: BluetoothLeScanner
-    private lateinit var scanSetting: ScanSettings
-    private var scanList: MutableList<ScanFilter> = mutableListOf<ScanFilter>()
-    var resultList = flowOf(mutableListOf<BluetoothScannerBatchResult>())
-    private var scanResults = flowOf(mutableListOf<ScanResult>())
+    private lateinit var scanCallback:ScanCallback
+
+
+    private val scanSetting = ScanSettings.Builder()
+        .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
+        .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+        .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+        .setReportDelay(3000)
+        //.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+        .build()
 
     @SuppressLint("MissingPermission")
-    suspend fun setScanList() {
-        flowListOfMacaddress.flowOn(Dispatchers.Default).collect { mc ->
-            if (mc.isNotEmpty()) {
-                Log.v("MainActivity", "FlowListOfMacAddress: ${gson.toJson(mc)}")
-                scanList = mutableListOf<ScanFilter>()
-                mc.forEach { i ->
-                    scanList!!.add(
-                        ScanFilter.Builder().setDeviceAddress(i.uppercase(Locale.ROOT))
-                            .build()
-                    )
-                }
-            } else {
-                scanList = mutableListOf<ScanFilter>()
-                bluetoothLeScanner?.stopScan(scanCallback)
-            }
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    override fun bluetoothScannerStart() {
-        bluetoothAdapter = bluetoothManager.adapter
-        if (bluetoothAdapter?.isEnabled == false) {
-            Toast.makeText(
-                context,
-                context.getString(R.string.enablebluetooth),
-                Toast.LENGTH_LONG
-            )
-                .show()
-        } else {
-            bluetoothLeScanner = bluetoothAdapter?.bluetoothLeScanner!!
-
-            scanSetting = ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_BALANCED)
-                .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
-                .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-                .setReportDelay(3000)
-                //.setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-                .build()
-
-            MainScope().launch {
-                setScanList()
-                delay(2000)
-                bluetoothLeScanner.startScan(scanList, scanSetting, scanCallback)
-            }
-        }
-    }
-
-    /*@SuppressLint("MissingPermission")
     override fun bluetoothScannerResults(): Flow<MutableList<BluetoothScannerBatchResult>?> =
         callbackFlow {
-            setScanList()
-            delay(100)
-            bluetoothScannerStart()
-            when (scanResults.first().size) {
-                0 -> {
-                    DoNothing()
+
+            bluetoothAdapter = bluetoothManager.adapter
+            if (bluetoothAdapter?.isEnabled == false) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.enablebluetooth),
+                    Toast.LENGTH_LONG
+                )
+                    .show()
+            }
+            else {
+                bluetoothLeScanner = bluetoothAdapter!!.bluetoothLeScanner
+                //setScanList()
+                delay(500)
+
+                scanCallback = object : ScanCallback() {
+                    override fun onScanResult(callbackType: Int, result: ScanResult?) {
+                        super.onScanResult(callbackType, result)
+                        result ?: return
+                    }
+
+                    @SuppressLint("MissingPermission")
+                    override fun onBatchScanResults(results: MutableList<ScanResult>?) {
+                        super.onBatchScanResults(results)
+                        results ?: return
+                        var rr = mutableListOf<BluetoothScannerBatchResult>()
+                        results.filter { a -> scanList.any { g -> g.deviceAddress?.uppercase() == a.device.address.uppercase() } }
+                            .forEach { cc ->
+                                rr.add(BluetoothScannerBatchResult(cc.device.address, cc.rssi))
+                            }
+                        trySend(rr).isSuccess
+                    }
+
+                    override fun onScanFailed(errorCode: Int) {
+                        super.onScanFailed(errorCode)
+                        Log.v("MainActivity", "onScanFailed: ${errorCode} ")
+                    }
                 }
 
-                else -> {
-                    scanResults.first().filter { a -> resultList.any { g -> g.macaddress?.uppercase() == a.device.address.uppercase() } }
-                        .forEach { cc ->
-                            resultList.first { a -> a.macaddress == cc.device.address }.rssi =
-                                cc.rssi
-                        }
+
+                when (scanJonState.value) {
+                    true -> {
+                        Log.v("MainActivity","bluetoothLeScanner.startScan")
+                        bluetoothLeScanner.startScan(scanList, scanSetting, scanCallback)
+                    }
+
+                    else -> {
+                        Log.v("MainActivity","bluetoothLeScanner.stopScan")
+                        bluetoothLeScanner.stopScan(scanCallback)
+                    }
+                }
+                awaitClose {
+                    Log.v("MainActivity","bluetoothLeScanner.stopScan at awaitClose")
+                    bluetoothLeScanner.stopScan(scanCallback)
                 }
             }
-
-            trySend(resultList).isSuccess
-            awaitClose {
-                bluetoothScannerStop()
-            }
-            stopLocationJob.collect {
-                if (it)
-                    bluetoothScannerStop()
-            }
-        }*/
-
-    @SuppressLint("MissingPermission")
-    override fun bluetoothScannerStop() {
-        bluetoothLeScanner?.stopScan(scanCallback)
-    }
-
-    private val scanCallback = object : ScanCallback() {
-        override fun onScanResult(callbackType: Int, result: ScanResult?) {
-            super.onScanResult(callbackType, result)
-            result ?: return
         }
 
-        @SuppressLint("MissingPermission")
-        override fun onBatchScanResults(results: MutableList<ScanResult>?) {
-            super.onBatchScanResults(results)
-            results ?: return
-            var rr = mutableListOf<BluetoothScannerBatchResult>()
-            results.filter { a -> scanList.any { g -> g.deviceAddress?.uppercase() == a.device.address.uppercase() } }
-                .forEach { cc ->
-                    rr.add(BluetoothScannerBatchResult(cc.device.address, cc.rssi))
-                }
-            resultList = flowOf(rr)
-        }
-
-        override fun onScanFailed(errorCode: Int) {
-            super.onScanFailed(errorCode)
-            Log.v("MainActivity", "onScanFailed: ${errorCode} ")
-        }
-    }
 
 }
