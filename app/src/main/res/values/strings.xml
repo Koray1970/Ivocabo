@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">Ivocabo</string>
+    <string name="dbname">ivocabodb.db</string>
+    <string name="privacypolicyurl">https://www.ivocabo.com/gi-zli-li-k-poli-ti-kasi</string>
     <string name="signupTitle">Sign Up</string>
     <string name="username">Username</string>
     <string name="email">Email</string>
@@ -8,6 +10,8 @@
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
     <string name="ireadandunderstand">I read and understood</string>
+    <string name="signupprivacypolicybutton">Privacy Policy</string>
+    <string name="signuppleasedisplayandreadprivacy">Please display and read privacy policy!</string>
     <string name="limit">Limit</string>
     <string name="signin">Sign in</string>
     <string name="signinTitle">Sign In</string>
@@ -71,4 +75,21 @@
     <string name="alrtnotificationwarningtext">Device tracking needs your permission to send you notifications from within the app.</string>
     <string name="alrtnotificationdeniedtext">Notification permission is denied, go to app settings for enabling.</string>
     <!--End::Notification Permission-->
+    <!--Start::Profile-->
+    <string name="prf_title">Personal Details</string>
+    <string name="prf_removeuser">Remove User</string>
+    <string name="prf_signout">Sign Out</string>
+    <string name="prf_privacypolicy">Privacy Policy</string>
+    <!--End::Profile-->
+    <!--Start::Preference-->
+    <string name="pre_preferencetitle">Preference</string>
+    <string name="pre_locationpermission">Location Permission</string>
+    <string name="pre_permissionratio">If permission denied, please set from device app settings!</string>
+    <string name="pre_bluetoothpermission">Bluetooth Permission</string>
+    <string name="pre_notificationpermission">Notification Permission</string>
+    <string name="pre_privacypolicysubmitstamp">Privacy Policy Submit Date</string>
+    <string name="pre_language">Languages</string>
+    <string name="pre_tr">TR</string>
+    <string name="pre_en">EN</string>
+    <!--End::Preference-->
 </resources>

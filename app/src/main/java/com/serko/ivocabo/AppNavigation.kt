@@ -69,5 +69,17 @@ fun AppNavigation(composeProgressDialogStatus:MutableState<Boolean>){
                 composeProgressDialogStatus
             )
         }
+        composable(Screen.Profile.route) {
+            Profile(
+                navController,
+                composeProgressDialogStatus
+            )
+        }
+        composable(Screen.Preference.route) {
+            Preference(
+                navController,
+                composeProgressDialogStatus
+            )
+        }
     }
 }

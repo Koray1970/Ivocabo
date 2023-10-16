@@ -205,7 +205,7 @@ class userViewModel @Inject constructor(
                         gson.fromJson<List<Device>>(
                             dbdevices,
                             object : TypeToken<List<Device>>() {}.type
-                        ).toMutableStateList()
+                        ).sortedBy { a->a.name }.toMutableStateList()
                     )
                 }
             }

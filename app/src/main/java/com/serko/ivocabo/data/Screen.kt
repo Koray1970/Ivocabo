@@ -10,4 +10,6 @@ sealed class Screen(val route:String){
     object DeviceDashboard:Screen("devicedashboard/{macaddress}")
     object FindMyDevice:Screen("findmydevice/{macaddress}")
     object TrackMyDevice:Screen("trackmydevice/{macaddress}")
+    object Profile:Screen("profile")
+    object Preference:Screen("preference")
 }

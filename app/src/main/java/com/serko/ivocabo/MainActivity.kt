@@ -3,12 +3,16 @@ package com.serko.ivocabo
 import android.annotation.SuppressLint
 import android.bluetooth.le.ScanFilter
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -38,15 +42,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomAppBar
+import androidx.compose.material3.BottomAppBarDefaults
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
@@ -60,23 +69,29 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismiss
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberDismissState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -93,6 +108,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -109,13 +125,13 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import androidx.work.Data
-import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -169,7 +185,7 @@ class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        //applicationContext.deleteDatabase("ivocabodb.db")
+        //applicationContext.deleteDatabase(applicationContext.getString(R.string.dbname))
 
         hideSystemUI()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
@@ -358,48 +374,70 @@ fun Dashboard(
 
         composeProgressStatus.value = false
         //end::Device Form assets
-        Scaffold(floatingActionButton = {
-            FloatingActionButton(
-                shape = CircleShape,
-                onClick = {
-                    scope.launch {
-                        composeProgressStatus.value = true
-                        delay(300)
-                        deviceFormScaffoldState.bottomSheetState.expand()
-                        if (deviceFormScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded) {
-                            composeProgressStatus.value = false
+        Scaffold(
+            bottomBar = {
+                BottomAppBar(
+                    actions = {
+                        IconButton(onClick = { navController.navigate(Screen.Profile.route) }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.baseline_person_24),
+                                contentDescription = null
+                            )
                         }
-                    }
-                },
-                content = {
-                    Icon(
-                        painter = painterResource(id = R.drawable.baseline_add_24),
-                        contentDescription = ""
-                    )
-                }
-            )
-        }, floatingActionButtonPosition = FabPosition.End) {
+                        IconButton(onClick = { navController.navigate(Screen.Preference.route) }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.baseline_settings_24),
+                                contentDescription = null
+                            )
+                        }
+                    },
+                    floatingActionButton = {
+                        FloatingActionButton(
+                            shape = CircleShape,
+                            containerColor = BottomAppBarDefaults.bottomAppBarFabColor,
+                            elevation = FloatingActionButtonDefaults.bottomAppBarFabElevation(),
+                            onClick = {
+                                scope.launch {
+                                    composeProgressStatus.value = true
+                                    delay(300)
+                                    deviceFormScaffoldState.bottomSheetState.expand()
+                                    if (deviceFormScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded) {
+                                        composeProgressStatus.value = false
+                                    }
+                                }
+                            },
+                            content = {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.baseline_add_24),
+                                    contentDescription = ""
+                                )
+                            }
+                        )
+                    },
+                )
+            }
+        ) {
             Column(modifier = Modifier.padding(it)) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(380.dp)
+                        .height(300.dp)
                 ) {
 
                     OpenStreetMap(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(380.dp),
+                            .height(300.dp),
                         cameraState = cameraState,
                         properties = mapProperties, // add properties
                     ) { Marker(state = mapMarkerState) }
-                    Box(
+                    /*Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)
                     ) {
                         Text(text = "Latitude: ${currentLocation.latitude} - ${currentLocation.longitude}")
-                    }
+                    }*/
                 }
                 HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
                 LazyColumn(
@@ -920,7 +958,7 @@ fun SignIn(
 }
 
 
-@OptIn(ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun Signup(
@@ -931,6 +969,10 @@ fun Signup(
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
 
+    var privacyIsDisplayed by remember { mutableStateOf(false) }
+    var privacyBottomSheet by remember { mutableStateOf(false) }
+    var privacysheetState = rememberModalBottomSheetState()
+    val snackbarHostState = remember { SnackbarHostState() }
     val locationPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
         LocationPermission(context)
 
@@ -983,10 +1025,15 @@ fun Signup(
                     text = { Text(text = context.getString(R.string.rgResultDialogContent)) }
                 )
             }
-            Surface(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Scaffold(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+            ) { innerpadding ->
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .padding(innerpadding)
+                        .fillMaxWidth()
                 ) {
                     Image(
                         modifier = Modifier.width(180.dp),
@@ -1097,96 +1144,148 @@ fun Signup(
                                 )
                             }
                         })
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        TextButton(onClick = { privacyBottomSheet = true }) {
+                            Text(text = context.getString(R.string.signupprivacypolicybutton))
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End
                     ) {
+                        Spacer(modifier = Modifier.weight(1f))
                         Button(modifier = Modifier.padding(horizontal = 3.dp), onClick = {
                             composeProgressStatus.value = true
                             navController.navigate(Screen.Signin.route)
                         }) {
                             Text(text = context.getString(R.string.signin))
                         }
+                        Spacer(modifier = Modifier.width(30.dp))
                         Button(onClick = {
-                            composeProgressStatus.value = true
-                            usernameError = formHelper.checkUsername(usernameVal)
-                            emailError = formHelper.checkEmail(emailVal)
-                            passwordError = formHelper.checkPassword(passwordVal)
-                            if (!(usernameError && emailError && passwordError)) {
-                                try {
-                                    //add to remote server
-
-                                    IApiService.getInstance()
-                                    val apiSrv = IApiService.apiService
-                                    val call: Call<EventResult> = apiSrv!!.srvSignUp(
-                                        SignUpRequest(
-                                            emailVal,
-                                            passwordVal,
-                                            usernameVal
-                                        )
-                                    )
-                                    call.enqueue(object : Callback<EventResult> {
-                                        override fun onResponse(
-                                            call: Call<EventResult>,
-                                            response: Response<EventResult>,
-                                        ) {
-                                            if (response.isSuccessful) {
-                                                if (response.body()!!.eventresultflag == 0) {
-                                                    //now u can add form items to database
-                                                    val enUserVal = security.encrypt(usernameVal)
-                                                    val enEmailVal = security.encrypt(emailVal)
-
-                                                    val user = User(
-                                                        0,
-                                                        helper.getNOWasSQLDate(),
-                                                        enUserVal,
-                                                        enEmailVal,
-                                                        null,
-                                                        null
-                                                    )
-                                                    scope.launch {
-                                                        userviewModel.insertUser(user)
-                                                        delay(300)
-                                                        composeProgressStatus.value = false
-                                                        remoteResultOpenDialog = true
-                                                    }
-                                                } else {
-                                                    if (response.body()!!.error != null) {
-                                                        val eRror = response.body()!!.error!!
-                                                        Toast.makeText(
-                                                            context,
-                                                            "Error Code : ${eRror.code}, Exception: ${eRror.exception}",
-                                                            Toast.LENGTH_LONG
-                                                        ).show()
-                                                    }
-                                                    composeProgressStatus.value = false
-                                                }
-                                            }
-                                        }
-
-                                        override fun onFailure(
-                                            call: Call<EventResult>,
-                                            t: Throwable,
-                                        ) {
-                                            Toast.makeText(
-                                                context,
-                                                "Error Code : SRV_REGEX10, Message : ${t.message.toString()}",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                        }
-                                    })
-                                } catch (ex: Exception) {
-                                    Toast.makeText(
-                                        context,
-                                        "General Exception: ${ex.message}",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                    composeProgressStatus.value = false
+                            if (!privacyIsDisplayed) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(context.getString(R.string.signuppleasedisplayandreadprivacy))
                                 }
                             } else {
-                                composeProgressStatus.value = false
+                                composeProgressStatus.value = true
+                                usernameError = formHelper.checkUsername(usernameVal)
+                                emailError = formHelper.checkEmail(emailVal)
+                                passwordError = formHelper.checkPassword(passwordVal)
+                                if (!(usernameError && emailError && passwordError)) {
+                                    try {
+                                        //add to remote server
+
+                                        IApiService.getInstance()
+                                        val apiSrv = IApiService.apiService
+                                        val call: Call<EventResult> = apiSrv!!.srvSignUp(
+                                            SignUpRequest(
+                                                emailVal,
+                                                passwordVal,
+                                                usernameVal
+                                            )
+                                        )
+                                        call.enqueue(object : Callback<EventResult> {
+                                            override fun onResponse(
+                                                call: Call<EventResult>,
+                                                response: Response<EventResult>,
+                                            ) {
+                                                if (response.isSuccessful) {
+                                                    if (response.body()!!.eventresultflag == 0) {
+                                                        //now u can add form items to database
+                                                        val enUserVal =
+                                                            security.encrypt(usernameVal)
+                                                        val enEmailVal = security.encrypt(emailVal)
+
+                                                        val user = User(
+                                                            0,
+                                                            helper.getNOWasSQLDate(),
+                                                            enUserVal,
+                                                            enEmailVal,
+                                                            null,
+                                                            null
+                                                        )
+                                                        scope.launch {
+                                                            userviewModel.insertUser(user)
+                                                            delay(300)
+                                                            composeProgressStatus.value = false
+                                                            remoteResultOpenDialog = true
+                                                        }
+                                                    } else {
+                                                        if (response.body()!!.error != null) {
+                                                            val eRror = response.body()!!.error!!
+                                                            Toast.makeText(
+                                                                context,
+                                                                "Error Code : ${eRror.code}, Exception: ${eRror.exception}",
+                                                                Toast.LENGTH_LONG
+                                                            ).show()
+                                                        }
+                                                        composeProgressStatus.value = false
+                                                    }
+                                                }
+                                            }
+
+                                            override fun onFailure(
+                                                call: Call<EventResult>,
+                                                t: Throwable,
+                                            ) {
+                                                Toast.makeText(
+                                                    context,
+                                                    "Error Code : SRV_REGEX10, Message : ${t.message.toString()}",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                        })
+                                    } catch (ex: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            "General Exception: ${ex.message}",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        composeProgressStatus.value = false
+                                    }
+                                } else {
+                                    composeProgressStatus.value = false
+                                }
                             }
                         }) {
                             Text(text = context.getString(R.string.save))
+                        }
+                    }
+                }
+                if (privacyBottomSheet) {
+                    ModalBottomSheet(
+                        shape = RectangleShape,
+                        onDismissRequest = {
+                            privacyIsDisplayed = true
+                            privacyBottomSheet = false
+                        },
+                        containerColor = Color.White,
+                        sheetState = privacysheetState,
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Button(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RectangleShape,
+                                onClick = {
+                                    scope.launch { privacysheetState.hide() }.invokeOnCompletion {
+                                        if (!privacysheetState.isVisible) {
+                                            privacyIsDisplayed = true
+                                            privacyBottomSheet = false
+                                        }
+                                    }
+                                }) {
+                                Text(text = context.getString(R.string.ireadandunderstand))
+                            }
+                            PrivacyViewer(context.getString(R.string.privacypolicyurl))
                         }
                     }
                 }
@@ -1224,6 +1323,7 @@ fun DeviceDashboard(
         val scope = rememberCoroutineScope()
         var deviceDetail by remember { mutableStateOf<Device>(dummyDevice) }
         var chkNotificationCheckState by remember { mutableStateOf(false) }
+        chkNotificationCheckState = deviceDetail.istracking ?: null == true
         var chkMissingCheckState by remember { mutableStateOf(false) }
         chkMissingCheckState = deviceDetail.ismissing ?: null == true
         val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
@@ -1264,27 +1364,51 @@ fun DeviceDashboard(
 
 
         Scaffold(
-            floatingActionButton = {
-                FloatingActionButton(
-                    containerColor = Color.Green,
-                    shape = CircleShape,
-                    onClick = {
-                        navController.navigate(Screen.Dashboard.route)
+            bottomBar = {
+                BottomAppBar(
+                    actions = {
+                        IconButton(onClick = { navController.navigate(Screen.Dashboard.route) }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.baseline_home_24),
+                                contentDescription = null
+                            )
+                        }
+                        IconButton(onClick = { navController.navigate(Screen.Profile.route) }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.baseline_person_24),
+                                contentDescription = null
+                            )
+                        }
+                        IconButton(onClick = { navController.navigate(Screen.Preference.route) }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.baseline_settings_24),
+                                contentDescription = null
+                            )
+                        }
                     },
-                    content = {
-                        Icon(
-                            painter = painterResource(id = R.drawable.baseline_arrow_back_24),
-                            contentDescription = ""
+                    floatingActionButton = {
+                        FloatingActionButton(
+                            containerColor = Color.Green,
+                            shape = CircleShape,
+                            onClick = {
+                                navController.navigate(Screen.Dashboard.route)
+                            },
+                            content = {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.baseline_arrow_back_24),
+                                    contentDescription = ""
+                                )
+                            }
                         )
-                    }
+                    },
                 )
-            }, floatingActionButtonPosition = FabPosition.Start
+            }
         ) { it ->
             Column(modifier = Modifier.padding(it)) {
                 OpenStreetMap(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(280.dp),
+                        .height(220.dp),
                     cameraState = cameraState,
                     properties = mapProperties
                 ) { Marker(state = mapMarkerState) }
@@ -1986,6 +2110,391 @@ fun TrackMyDevice(
         BackHandler(true) {}
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun Profile(
+    navController: NavController,
+    composeProgressStatus: MutableState<Boolean>,
+    userviewModel: userViewModel = hiltViewModel()
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current.applicationContext
+    val userDetail = userviewModel.fetchUser()
+
+    var privacyBottomSheet by remember { mutableStateOf(false) }
+    var privacysheetState = rememberModalBottomSheetState()
+    Scaffold(
+        bottomBar = {
+            BottomAppBar(
+                actions = {
+                    IconButton(onClick = { navController.navigate(Screen.Dashboard.route) }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.baseline_home_24),
+                            contentDescription = null
+                        )
+                    }
+                    /*IconButton(onClick = { navController.navigate(Screen.Profile.route) }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.baseline_person_24),
+                            contentDescription = null
+                        )
+                    }*/
+                    IconButton(onClick = { navController.navigate(Screen.Preference.route) }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.baseline_settings_24),
+                            contentDescription = null
+                        )
+                    }
+                },
+                floatingActionButton = {
+                    FloatingActionButton(
+                        containerColor = Color.Green,
+                        shape = CircleShape,
+                        onClick = {
+                            navController.navigate(Screen.Dashboard.route)
+                        },
+                        content = {
+                            Icon(
+                                painter = painterResource(id = R.drawable.baseline_arrow_back_24),
+                                contentDescription = ""
+                            )
+                        }
+                    )
+                },
+            )
+        }
+
+    ) { innerpadding ->
+        Column(
+            modifier = Modifier
+                .padding(innerpadding)
+                .padding(20.dp)
+                .fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+
+            Text(
+                text = context.getString(R.string.prf_title),
+                style = ComposeTitle,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(40.dp))
+            Text(
+                text = "${context.getString(R.string.username)} : ",
+                style = profileFormLabel,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = userDetail.username,
+                style = profileFormValue,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "${context.getString(R.string.email)} : ",
+                style = profileFormLabel,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                text = userDetail.email,
+                style = profileFormValue,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Button(
+                    onClick = { privacyBottomSheet = true },
+                    shape = RoundedCornerShape(corner = CornerSize(6.dp))
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.baseline_privacy_tip_24),
+                        contentDescription = null
+                    )
+                    Text(text = context.getString(R.string.prf_privacypolicy))
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Row() {
+                Button(
+                    onClick = { /*TODO*/ },
+                    shape = RoundedCornerShape(corner = CornerSize(6.dp))
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.baseline_delete_24),
+                        contentDescription = null
+                    )
+                    Text(text = context.getString(R.string.prf_removeuser))
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Button(
+                    onClick = {
+                        context.deleteDatabase(context.getString(R.string.dbname))
+                        navController.navigate(Screen.Signin.route)
+                    },
+                    shape = RoundedCornerShape(corner = CornerSize(6.dp))
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.baseline_logout_24),
+                        contentDescription = null
+                    )
+                    Text(text = context.getString(R.string.prf_signout))
+                }
+            }
+        }
+
+        if (privacyBottomSheet) {
+            ModalBottomSheet(
+                shape = RectangleShape,
+                onDismissRequest = {
+                    privacyBottomSheet = false
+                },
+                containerColor = Color.White,
+                sheetState = privacysheetState,
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RectangleShape,
+                        onClick = {
+                            scope.launch { privacysheetState.hide() }.invokeOnCompletion {
+                                if (!privacysheetState.isVisible) {
+                                    privacyBottomSheet = false
+                                }
+                            }
+                        }) {
+                        Text(text = context.getString(R.string.ireadandunderstand))
+                    }
+                    PrivacyViewer(context.getString(R.string.privacypolicyurl))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun Preference(
+    navController: NavController,
+    composeProgressStatus: MutableState<Boolean>,
+    userviewModel: userViewModel = hiltViewModel()
+) {
+    val context = LocalContext.current.applicationContext
+    val userDetail = userviewModel.fetchUser()
+
+    var locationPermissionIcon by remember { mutableStateOf(R.drawable.baseline_indeterminate_check_box_24) }
+    if (context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+        locationPermissionIcon = R.drawable.baseline_check_box_24
+
+    var bluetoothPermissionIcon by remember { mutableStateOf(R.drawable.baseline_indeterminate_check_box_24) }
+    if (context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        || context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+    )
+        bluetoothPermissionIcon = R.drawable.baseline_check_box_24
+
+    var notificationPermissionIcon by remember { mutableStateOf(R.drawable.baseline_indeterminate_check_box_24) }
+    if (context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+        notificationPermissionIcon = R.drawable.baseline_check_box_24
+    Scaffold(
+        bottomBar = {
+            BottomAppBar(
+                actions = {
+                    IconButton(onClick = { navController.navigate(Screen.Dashboard.route) }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.baseline_home_24),
+                            contentDescription = null
+                        )
+                    }
+                    IconButton(onClick = { navController.navigate(Screen.Profile.route) }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.baseline_person_24),
+                            contentDescription = null
+                        )
+                    }
+                    /*IconButton(onClick = { navController.navigate(Screen.Preference.route) }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.baseline_settings_24),
+                            contentDescription = null
+                        )
+                    }*/
+                },
+                floatingActionButton = {
+                    FloatingActionButton(
+                        containerColor = Color.Green,
+                        shape = CircleShape,
+                        onClick = {
+                            navController.navigate(Screen.Dashboard.route)
+                        },
+                        content = {
+                            Icon(
+                                painter = painterResource(id = R.drawable.baseline_arrow_back_24),
+                                contentDescription = ""
+                            )
+                        }
+                    )
+                },
+            )
+        }
+
+    ) { innerpadding ->
+        Column(
+            modifier = Modifier
+                .padding(innerpadding)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = context.getString(R.string.pre_preferencetitle),
+                style = ComposeTitle,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(40.dp))
+
+            ListItem(
+                trailingContent = {
+                    Icon(
+                        painter = painterResource(id = locationPermissionIcon),
+                        contentDescription = null
+                    )
+                },
+                headlineContent = {
+                    Text(
+                        text = "${context.getString(R.string.pre_locationpermission)} : ",
+                        style = profileFormLabel,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.baseline_location_on_24),
+                        contentDescription = null
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = "${context.getString(R.string.pre_permissionratio)} : ",
+                        style = preferanceSupportingText,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            )
+            HorizontalDivider()
+            ListItem(
+                trailingContent = {
+                    Icon(
+                        painter = painterResource(id = bluetoothPermissionIcon),
+                        contentDescription = null
+                    )
+                },
+                headlineContent = {
+                    Text(
+                        text = "${context.getString(R.string.pre_bluetoothpermission)} : ",
+                        style = profileFormLabel,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.baseline_bluetooth_24),
+                        contentDescription = null
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = "${context.getString(R.string.pre_permissionratio)} : ",
+                        style = preferanceSupportingText,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            )
+            HorizontalDivider()
+            ListItem(
+                trailingContent = {
+                    Icon(
+                        painter = painterResource(id = notificationPermissionIcon),
+                        contentDescription = null
+                    )
+                },
+                headlineContent = {
+                    Text(
+                        text = "${context.getString(R.string.pre_notificationpermission)} : ",
+                        style = profileFormLabel,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.baseline_notifications_24),
+                        contentDescription = null
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = "${context.getString(R.string.pre_permissionratio)} : ",
+                        style = preferanceSupportingText,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            )
+            HorizontalDivider()
+            ListItem(
+                trailingContent = {
+                    IconButton(onClick = { /*TODO*/ }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.baseline_info_24),
+                            contentDescription = null
+                        )
+                    }
+                },
+                headlineContent = {
+                    Text(
+                        text = "${context.getString(R.string.pre_privacypolicysubmitstamp)} : ",
+                        style = profileFormLabel,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                leadingContent = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.baseline_privacy_tip_24),
+                        contentDescription = null
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = userDetail.registerdate.toString(),
+                        style = preferanceSupportingText,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            )
+            HorizontalDivider()
+        }
+    }
+}
+
+@Composable
+private fun PrivacyViewer(url: String) = AndroidView(
+    modifier = Modifier
+        .fillMaxSize()
+        .padding(8.dp)
+        .verticalScroll(rememberScrollState()),
+    factory = {
+        WebView(it).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            webViewClient = WebViewClient()
+            loadUrl(url)
+        }
+    }, update = { it.loadUrl(url) })
 
 
 /*@Preview(showBackground = true)
