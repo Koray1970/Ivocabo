@@ -280,33 +280,8 @@ fun Dashboard(
     composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
 
-    var user = userviewModel.fetchUser()
-    var tokenData: Data? = null
-
-    bluetoothScanService = BluetoothScanService(context)
-
-    /*val workManager = WorkManager.getInstance(context)
-    var oneTimeWorkRequest: OneTimeWorkRequest? = null
-    var periodicWorkRequest: PeriodicWorkRequest? = null
-
-    if (user.token?.isNullOrEmpty() == false) {
-        tokenData = Data.Builder().putString("usertoken", user.token).build()
-        oneTimeWorkRequest = OneTimeWorkRequestBuilder<TrackWorker>()
-            .setInputData(tokenData)
-            .build()
-        workManager.enqueue(oneTimeWorkRequest)
-
-
-        LaunchedEffect(Unit) {
-            delay(3200)
-            periodicWorkRequest =
-                PeriodicWorkRequestBuilder<TrackWorker>(16, TimeUnit.MINUTES)
-                    .setInputData(tokenData!!)
-                    .build()
-            workManager.enqueue(periodicWorkRequest!!)
-        }
-
-    }*/
+    /*var user = userviewModel.fetchUser()
+    var tokenData: Data? = null*/
 
 
     val locationPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
@@ -318,419 +293,452 @@ fun Dashboard(
             locationPermissionStatus.second.launchMultiplePermissionRequest()
         }
     } else {
-        val scope = rememberCoroutineScope()
-
-        var currentLocation by remember { mutableStateOf(LatLng(0.0, 0.0)) }
-        val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
-        var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
-        mapProperties = mapProperties
-            .copy(isTilesScaledToDpi = true)
-            .copy(tileSources = TileSourceFactory.MAPNIK)
-            .copy(isEnableRotationGesture = false)
-            .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
-
-        val cameraState = rememberCameraState {
-            geoPoint = GeoPoint(0.0, 0.0)
-            zoom = 19.0 // optional, default is 5.0
-        }
-
-
-        val networkLocation = AppFusedLocationRepo(context)
-        LaunchedEffect(Unit) {
-            withTimeoutOrNull(10001) {
-                networkLocation.startCurrentLocation()
-                    .flowOn(Dispatchers.IO)
-                    .collect { loc ->
-                        if (loc != null) {
-                            currentLocation = loc
-                            Log.v("MainActivity", "LatLng : ${gson.toJson(currentLocation)}")
-                            val geopoint =
-                                GeoPoint(currentLocation.latitude, currentLocation.longitude)
-                            cameraState.geoPoint = geopoint
-                            mapMarkerState.geoPoint = geopoint
-                        }
-                    }
+        val bluetoothPermissionStatus= BluetoothPermission(context)
+        if (!bluetoothPermissionStatus.first) {
+            LaunchedEffect(Unit) {
+                delay(300)
+                bluetoothPermissionStatus.second.launchMultiplePermissionRequest()
             }
-        }
+            composeProgressStatus.value = false
+        } else {
+
+            val notificationPermission = NotificationPermission(context)
+            if (!notificationPermission.first) {
+                LaunchedEffect(Unit) {
+                    delay(300)
+                    notificationPermission.second.launchPermissionRequest()
+                }
+                composeProgressStatus.value = false
+            } else {
+                val scope = rememberCoroutineScope()
+                bluetoothScanService = BluetoothScanService(context)
+                var currentLocation by remember { mutableStateOf(LatLng(0.0, 0.0)) }
+                val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
+                var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
+                mapProperties = mapProperties
+                    .copy(isTilesScaledToDpi = true)
+                    .copy(tileSources = TileSourceFactory.MAPNIK)
+                    .copy(isEnableRotationGesture = false)
+                    .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+
+                val cameraState = rememberCameraState {
+                    geoPoint = GeoPoint(0.0, 0.0)
+                    zoom = 19.0 // optional, default is 5.0
+                }
 
 
-        val focusManager = LocalFocusManager.current
-        val keyboardController = LocalSoftwareKeyboardController.current
-        val tDevice = dummyDevice
+                val networkLocation = AppFusedLocationRepo(context)
+                LaunchedEffect(Unit) {
+                    withTimeoutOrNull(10001) {
+                        networkLocation.startCurrentLocation()
+                            .flowOn(Dispatchers.IO)
+                            .collect { loc ->
+                                if (loc != null) {
+                                    currentLocation = loc
+                                    Log.v(
+                                        "MainActivity",
+                                        "LatLng : ${gson.toJson(currentLocation)}"
+                                    )
+                                    val geopoint =
+                                        GeoPoint(
+                                            currentLocation.latitude,
+                                            currentLocation.longitude
+                                        )
+                                    cameraState.geoPoint = geopoint
+                                    mapMarkerState.geoPoint = geopoint
+                                }
+                            }
+                    }
+                }
 
-        val deviceFormHelper = DeviceFormHelper()
-        val deviceIconlist: MutableList<FormDeviceItem>
-        deviceIconlist = deviceFormHelper.FormDeviceList(context)
 
-        val (selectedOption, onOptionSelected) = remember { mutableStateOf(deviceIconlist[0]) }
+                val focusManager = LocalFocusManager.current
+                val keyboardController = LocalSoftwareKeyboardController.current
+                val tDevice = dummyDevice
 
-        var deviceName by rememberSaveable { mutableStateOf(tDevice.name) }
-        var deviceMacaddress by rememberSaveable { mutableStateOf(tDevice.macaddress) }
+                val deviceFormHelper = DeviceFormHelper()
+                val deviceIconlist: MutableList<FormDeviceItem>
+                deviceIconlist = deviceFormHelper.FormDeviceList(context)
 
-        val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
-        //var devicelist = remember { mutableListOf<Device>() }
-        var devicelistFlowState =
-            userviewModel.getDeviceFlowList().collectAsState(initial = mutableListOf<Device>())
+                val (selectedOption, onOptionSelected) = remember { mutableStateOf(deviceIconlist[0]) }
 
-        composeProgressStatus.value = false
-        //end::Device Form assets
-        Scaffold(
-            bottomBar = {
-                BottomAppBar(
-                    actions = {
-                        IconButton(onClick = { navController.navigate(Screen.Profile.route) }) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.baseline_person_24),
-                                contentDescription = null
-                            )
-                        }
-                        IconButton(onClick = { navController.navigate(Screen.Preference.route) }) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.baseline_settings_24),
-                                contentDescription = null
-                            )
-                        }
-                    },
-                    floatingActionButton = {
-                        FloatingActionButton(
-                            shape = CircleShape,
-                            containerColor = BottomAppBarDefaults.bottomAppBarFabColor,
-                            elevation = FloatingActionButtonDefaults.bottomAppBarFabElevation(),
-                            onClick = {
-                                scope.launch {
-                                    composeProgressStatus.value = true
-                                    delay(300)
-                                    deviceFormScaffoldState.bottomSheetState.expand()
-                                    if (deviceFormScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded) {
-                                        composeProgressStatus.value = false
-                                    }
+                var deviceName by rememberSaveable { mutableStateOf(tDevice.name) }
+                var deviceMacaddress by rememberSaveable { mutableStateOf(tDevice.macaddress) }
+
+                val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
+                //var devicelist = remember { mutableListOf<Device>() }
+                var devicelistFlowState =
+                    userviewModel.getDeviceFlowList()
+                        .collectAsState(initial = mutableListOf<Device>())
+
+                composeProgressStatus.value = false
+                //end::Device Form assets
+                Scaffold(
+                    bottomBar = {
+                        BottomAppBar(
+                            actions = {
+                                IconButton(onClick = { navController.navigate(Screen.Profile.route) }) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.baseline_person_24),
+                                        contentDescription = null
+                                    )
+                                }
+                                IconButton(onClick = { navController.navigate(Screen.Preference.route) }) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.baseline_settings_24),
+                                        contentDescription = null
+                                    )
                                 }
                             },
-                            content = {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.baseline_add_24),
-                                    contentDescription = ""
+                            floatingActionButton = {
+                                FloatingActionButton(
+                                    shape = CircleShape,
+                                    containerColor = BottomAppBarDefaults.bottomAppBarFabColor,
+                                    elevation = FloatingActionButtonDefaults.bottomAppBarFabElevation(),
+                                    onClick = {
+                                        scope.launch {
+                                            composeProgressStatus.value = true
+                                            delay(300)
+                                            deviceFormScaffoldState.bottomSheetState.expand()
+                                            if (deviceFormScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded) {
+                                                composeProgressStatus.value = false
+                                            }
+                                        }
+                                    },
+                                    content = {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.baseline_add_24),
+                                            contentDescription = ""
+                                        )
+                                    }
                                 )
-                            }
+                            },
                         )
-                    },
-                )
-            }
-        ) {
-            Column(modifier = Modifier.padding(it)) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(300.dp)
+                    }
                 ) {
+                    Column(modifier = Modifier.padding(it)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(300.dp)
+                        ) {
 
-                    OpenStreetMap(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(300.dp),
-                        cameraState = cameraState,
-                        properties = mapProperties, // add properties
-                    ) { Marker(state = mapMarkerState) }
-                    /*Box(
+                            OpenStreetMap(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(300.dp),
+                                cameraState = cameraState,
+                                properties = mapProperties, // add properties
+                            ) { Marker(state = mapMarkerState) }
+                            /*Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)
                     ) {
                         Text(text = "Latitude: ${currentLocation.latitude} - ${currentLocation.longitude}")
                     }*/
-                }
-                HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black)
-                ) {
-                    itemsIndexed(devicelistFlowState.value) { _, dd ->
-                        var deviceDismissShow by remember { mutableStateOf(true) }
-                        val deviceDismissState =
-                            rememberDismissState(confirmValueChange = { dismissValue ->
-                                when (dismissValue) {
-                                    DismissedToStart -> {
-                                        userviewModel.DeleteDevice(dd)
-                                        deviceDismissShow = false
-                                        true
-                                    }
+                        }
+                        HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black)
+                        ) {
+                            itemsIndexed(devicelistFlowState.value) { _, dd ->
+                                var deviceDismissShow by remember { mutableStateOf(true) }
+                                val deviceDismissState =
+                                    rememberDismissState(confirmValueChange = { dismissValue ->
+                                        when (dismissValue) {
+                                            DismissedToStart -> {
+                                                userviewModel.DeleteDevice(dd)
+                                                deviceDismissShow = false
+                                                true
+                                            }
 
-                                    DismissedToEnd -> {
-                                        scope.launch {
-                                            composeProgressStatus.value = true
-                                            delay(300)
-                                            deviceFormScaffoldState.bottomSheetState.expand()
+                                            DismissedToEnd -> {
+                                                scope.launch {
+                                                    composeProgressStatus.value = true
+                                                    delay(300)
+                                                    deviceFormScaffoldState.bottomSheetState.expand()
+                                                }
+                                                deviceDismissShow = false
+                                                true
+                                            }
+
+                                            else -> false
                                         }
-                                        deviceDismissShow = false
-                                        true
-                                    }
 
-                                    else -> false
-                                }
-
-                            }, positionalThreshold = { 150f })
-                        AnimatedVisibility(deviceDismissShow, exit = fadeOut(spring())) {
-                            SwipeToDismiss(
-                                state = deviceDismissState,
-                                directions = setOf(DismissDirection.EndToStart),
-                                background = {
-                                    val direction =
-                                        deviceDismissState.dismissDirection ?: return@SwipeToDismiss
-                                    val color by animateColorAsState(
-                                        when (deviceDismissState.targetValue) {
-                                            Default -> Color.LightGray
-                                            DismissedToEnd -> Color.Green
-                                            else -> Color.Red
-                                        },
-                                        label = ""
-                                    )
-                                    val eventIcon = when (direction) {
-                                        DismissDirection.StartToEnd -> R.drawable.baseline_edit_24
-                                        DismissDirection.EndToStart -> R.drawable.baseline_delete_24
-                                    }
-                                    val boxIconScale by animateFloatAsState(
-                                        targetValue =
-                                        if (deviceDismissState.targetValue == Default)
-                                            .8f else 1.2f, label = ""
-                                    )
-                                    val boxAlignment =
-                                        when (direction) {
-                                            DismissDirection.StartToEnd -> Alignment.CenterStart
-                                            DismissDirection.EndToStart -> Alignment.CenterEnd
-                                        }
-                                    Box(
-                                        Modifier
-                                            .fillMaxSize()
-                                            .background(color),
-                                        contentAlignment = boxAlignment
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(id = eventIcon),
-                                            contentDescription = "",
-                                            modifier = Modifier
-                                                .scale(boxIconScale)
-                                                .padding(start = 24.dp, end = 24.dp)
-                                        )
-                                    }
-                                },
-                                dismissContent = {
-                                    Card(
-                                        modifier = Modifier.clickable(onClick = {
-                                            networkLocation.stopLocationJob.tryEmit(true)
-                                            navController.navigate("devicedashboard/${dd.macaddress}")
-                                        }),
-                                        shape = RoundedCornerShape(0.dp),
-                                    ) {
-                                        ListItem(
-                                            leadingContent = {
-                                                var deviceIcon = R.drawable.t3_icon_32
-                                                if (dd.devicetype == 2)
-                                                    deviceIcon = R.drawable.e9_icon_32
+                                    }, positionalThreshold = { 150f })
+                                AnimatedVisibility(deviceDismissShow, exit = fadeOut(spring())) {
+                                    SwipeToDismiss(
+                                        state = deviceDismissState,
+                                        directions = setOf(DismissDirection.EndToStart),
+                                        background = {
+                                            val direction =
+                                                deviceDismissState.dismissDirection
+                                                    ?: return@SwipeToDismiss
+                                            val color by animateColorAsState(
+                                                when (deviceDismissState.targetValue) {
+                                                    Default -> Color.LightGray
+                                                    DismissedToEnd -> Color.Green
+                                                    else -> Color.Red
+                                                },
+                                                label = ""
+                                            )
+                                            val eventIcon = when (direction) {
+                                                DismissDirection.StartToEnd -> R.drawable.baseline_edit_24
+                                                DismissDirection.EndToStart -> R.drawable.baseline_delete_24
+                                            }
+                                            val boxIconScale by animateFloatAsState(
+                                                targetValue =
+                                                if (deviceDismissState.targetValue == Default)
+                                                    .8f else 1.2f, label = ""
+                                            )
+                                            val boxAlignment =
+                                                when (direction) {
+                                                    DismissDirection.StartToEnd -> Alignment.CenterStart
+                                                    DismissDirection.EndToStart -> Alignment.CenterEnd
+                                                }
+                                            Box(
+                                                Modifier
+                                                    .fillMaxSize()
+                                                    .background(color),
+                                                contentAlignment = boxAlignment
+                                            ) {
                                                 Icon(
-                                                    painter = painterResource(id = deviceIcon),
-                                                    contentDescription = null,
-                                                    tint = Color.DarkGray
-                                                )
-                                            },
-                                            headlineContent = {
-                                                Text(
-                                                    text = dd.name.uppercase(Locale.ROOT),
-                                                    style = TextStyle(
-                                                        color = Color.DarkGray,
-                                                        fontWeight = FontWeight.ExtraBold,
-                                                        fontSize = 16.sp
-                                                    )
-                                                )
-                                            },
-                                            supportingContent = {
-                                                Text(
-                                                    text = dd.macaddress.uppercase(Locale.ROOT),
-                                                    style = TextStyle(
-                                                        color = Color.Gray,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                    )
+                                                    painter = painterResource(id = eventIcon),
+                                                    contentDescription = "",
+                                                    modifier = Modifier
+                                                        .scale(boxIconScale)
+                                                        .padding(start = 24.dp, end = 24.dp)
                                                 )
                                             }
-                                        )
-                                        HorizontalDivider()
-                                    }
-                                })
-                        }
-                    }
-                }
-            }
-        }
-        //start::Device Form
-
-
-        BottomSheetScaffold(
-            scaffoldState = deviceFormScaffoldState,
-            sheetPeekHeight = 0.dp,
-            sheetContent = {
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(10.dp)
-                ) {
-                    Text(
-                        text = context.getString(R.string.deviceformTitle),
-                        style = formTitle,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    HorizontalDivider(thickness = 1.dp)
-                    Spacer(modifier = Modifier.height(20.dp))
-                    TextField(
-                        value = deviceMacaddress,
-                        onValueChange = { deviceMacaddress = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(context.getString(R.string.macaddress)) },
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Characters,
-                            autoCorrect = false
-                        ),
-                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    TextField(
-                        value = deviceName,
-                        onValueChange = { deviceName = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(context.getString(R.string.name)) },
-                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Column(Modifier.selectableGroup()) {
-                        deviceIconlist.forEach {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp)
-                                    .selectable(
-                                        selected = (it == selectedOption),
-                                        onClick = { onOptionSelected(it) },
-                                        role = Role.RadioButton
-                                    )
-                                    .padding(horizontal = 16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = (it == selectedOption),
-                                    onClick = null // null recommended for accessibility with screenreaders
-                                )
-                                Text(
-                                    text = context.getString(it.name),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.padding(start = 16.dp)
-                                )
-                                Icon(
-                                    painter = painterResource(id = it.image),
-                                    modifier = Modifier.padding(start = 16.dp),
-                                    contentDescription = context.getString(it.name)
-                                )
+                                        },
+                                        dismissContent = {
+                                            Card(
+                                                modifier = Modifier.clickable(onClick = {
+                                                    networkLocation.stopLocationJob.tryEmit(true)
+                                                    navController.navigate("devicedashboard/${dd.macaddress}")
+                                                }),
+                                                shape = RoundedCornerShape(0.dp),
+                                            ) {
+                                                ListItem(
+                                                    leadingContent = {
+                                                        var deviceIcon = R.drawable.t3_icon_32
+                                                        if (dd.devicetype == 2)
+                                                            deviceIcon = R.drawable.e9_icon_32
+                                                        Icon(
+                                                            painter = painterResource(id = deviceIcon),
+                                                            contentDescription = null,
+                                                            tint = Color.DarkGray
+                                                        )
+                                                    },
+                                                    headlineContent = {
+                                                        Text(
+                                                            text = dd.name.uppercase(Locale.ROOT),
+                                                            style = TextStyle(
+                                                                color = Color.DarkGray,
+                                                                fontWeight = FontWeight.ExtraBold,
+                                                                fontSize = 16.sp
+                                                            )
+                                                        )
+                                                    },
+                                                    supportingContent = {
+                                                        Text(
+                                                            text = dd.macaddress.uppercase(Locale.ROOT),
+                                                            style = TextStyle(
+                                                                color = Color.Gray,
+                                                                fontWeight = FontWeight.SemiBold,
+                                                            )
+                                                        )
+                                                    }
+                                                )
+                                                HorizontalDivider()
+                                            }
+                                        })
+                                }
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Row {
-                        val obsAddEdit = userviewModel.mutablelivedataRMEventResult.collectAsState()
-                        Button(
-                            onClick = {
-                                deviceName = ""
-                                deviceMacaddress = ""
-                                keyboardController!!.hide()
-                                scope.launch {
-                                    deviceFormScaffoldState.bottomSheetState.partialExpand()
-                                }
-                            },
-                            content = { Text(context.getString(R.string.cancel)) }
-                        )
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    composeProgressStatus.value = true
-                                    keyboardController!!.hide()
-                                    tDevice.name = deviceName
-                                    tDevice.macaddress = helper.formatedMacAddress(deviceMacaddress)
-                                    tDevice.devicetype = selectedOption.id
-                                    tDevice.latitude = currentLocation.latitude.toString()
-                                    tDevice.longitude = currentLocation.longitude.toString()
-                                    tDevice.registerdate = helper.getNOWasString()
+                }
+                //start::Device Form
 
-                                    userviewModel.addUpdateDevice(tDevice)
-                                        .flowOn(Dispatchers.Default).cancellable()
-                                        .collect { result ->
-                                            when (result) {
-                                                null -> {
-                                                    DoNothing()
+
+                BottomSheetScaffold(
+                    scaffoldState = deviceFormScaffoldState,
+                    sheetPeekHeight = 0.dp,
+                    sheetContent = {
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(10.dp)
+                        ) {
+                            Text(
+                                text = context.getString(R.string.deviceformTitle),
+                                style = formTitle,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            HorizontalDivider(thickness = 1.dp)
+                            Spacer(modifier = Modifier.height(20.dp))
+                            TextField(
+                                value = deviceMacaddress,
+                                onValueChange = { deviceMacaddress = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(context.getString(R.string.macaddress)) },
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Characters,
+                                    autoCorrect = false
+                                ),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            TextField(
+                                value = deviceName,
+                                onValueChange = { deviceName = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text(context.getString(R.string.name)) },
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Column(Modifier.selectableGroup()) {
+                                deviceIconlist.forEach {
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .height(56.dp)
+                                            .selectable(
+                                                selected = (it == selectedOption),
+                                                onClick = { onOptionSelected(it) },
+                                                role = Role.RadioButton
+                                            )
+                                            .padding(horizontal = 16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        RadioButton(
+                                            selected = (it == selectedOption),
+                                            onClick = null // null recommended for accessibility with screenreaders
+                                        )
+                                        Text(
+                                            text = context.getString(it.name),
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            modifier = Modifier.padding(start = 16.dp)
+                                        )
+                                        Icon(
+                                            painter = painterResource(id = it.image),
+                                            modifier = Modifier.padding(start = 16.dp),
+                                            contentDescription = context.getString(it.name)
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Row {
+                                val obsAddEdit =
+                                    userviewModel.mutablelivedataRMEventResult.collectAsState()
+                                Button(
+                                    onClick = {
+                                        deviceName = ""
+                                        deviceMacaddress = ""
+                                        keyboardController!!.hide()
+                                        scope.launch {
+                                            deviceFormScaffoldState.bottomSheetState.partialExpand()
+                                        }
+                                    },
+                                    content = { Text(context.getString(R.string.cancel)) }
+                                )
+                                Button(
+                                    onClick = {
+                                        scope.launch {
+                                            composeProgressStatus.value = true
+                                            keyboardController!!.hide()
+                                            tDevice.name = deviceName
+                                            tDevice.macaddress =
+                                                helper.formatedMacAddress(deviceMacaddress)
+                                            tDevice.devicetype = selectedOption.id
+                                            tDevice.latitude = currentLocation.latitude.toString()
+                                            tDevice.longitude = currentLocation.longitude.toString()
+                                            tDevice.registerdate = helper.getNOWasString()
+
+                                            userviewModel.addUpdateDevice(tDevice)
+                                                .flowOn(Dispatchers.Default).cancellable()
+                                                .collect { result ->
+                                                    when (result) {
+                                                        null -> {
+                                                            DoNothing()
+                                                        }
+
+                                                        else -> {
+                                                            if (result.resultFlag.flag == 1) {
+                                                                scope.launch {
+                                                                    devicelistFlowState.value.add(
+                                                                        tDevice
+                                                                    )
+                                                                    delay(600)
+                                                                    composeProgressStatus.value =
+                                                                        false
+                                                                    //delay(400)
+                                                                    deviceFormScaffoldState.bottomSheetState.partialExpand()
+                                                                }
+                                                            } else {
+                                                                if (result.error != null) {
+                                                                    Toast.makeText(
+                                                                        context,
+                                                                        "Error Code : ${result.error!!.code}, Exception : ${result.error!!.exception}",
+                                                                        Toast.LENGTH_LONG
+                                                                    ).show()
+                                                                }
+                                                            }
+                                                        }
+                                                    }
                                                 }
 
-                                                else -> {
-                                                    if (result.resultFlag.flag == 1) {
-                                                        scope.launch {
-                                                            devicelistFlowState.value.add(tDevice)
-                                                            delay(600)
+                                            when (obsAddEdit.value.stateStatus) {
+                                                RMEventStatus.Complete -> {
+                                                    deviceName = ""
+                                                    deviceMacaddress = ""
+
+                                                    scope.launch {
+                                                        if (userviewModel.devicelist.add(tDevice)) {
                                                             composeProgressStatus.value = false
-                                                            //delay(400)
-                                                            deviceFormScaffoldState.bottomSheetState.partialExpand()
                                                         }
-                                                    } else {
-                                                        if (result.error != null) {
+                                                        delay(400)
+                                                        deviceFormScaffoldState.bottomSheetState.partialExpand()
+                                                    }
+                                                }
+
+                                                RMEventStatus.Exception -> {
+                                                    composeProgressStatus.value = false
+                                                    val formEventRes =
+                                                        obsAddEdit.value.formEventResult
+                                                    if (formEventRes != null) {
+                                                        if (formEventRes.error != null) {
                                                             Toast.makeText(
                                                                 context,
-                                                                "Error Code : ${result.error!!.code}, Exception : ${result.error!!.exception}",
+                                                                formEventRes.error!!.exception,
                                                                 Toast.LENGTH_LONG
                                                             ).show()
                                                         }
                                                     }
                                                 }
-                                            }
-                                        }
 
-                                    when (obsAddEdit.value.stateStatus) {
-                                        RMEventStatus.Complete -> {
-                                            deviceName = ""
-                                            deviceMacaddress = ""
-
-                                            scope.launch {
-                                                if (userviewModel.devicelist.add(tDevice)) {
-                                                    composeProgressStatus.value = false
-                                                }
-                                                delay(400)
-                                                deviceFormScaffoldState.bottomSheetState.partialExpand()
-                                            }
-                                        }
-
-                                        RMEventStatus.Exception -> {
-                                            composeProgressStatus.value = false
-                                            val formEventRes = obsAddEdit.value.formEventResult
-                                            if (formEventRes != null) {
-                                                if (formEventRes.error != null) {
-                                                    Toast.makeText(
-                                                        context,
-                                                        formEventRes.error!!.exception,
-                                                        Toast.LENGTH_LONG
-                                                    ).show()
+                                                else -> {
+                                                    composeProgressStatus.value = true
                                                 }
                                             }
                                         }
+                                    },
+                                    content = { Text(context.getString(R.string.save)) }
+                                )
+                            }
 
-                                        else -> {
-                                            composeProgressStatus.value = true
-                                        }
-                                    }
-                                }
-                            },
-                            content = { Text(context.getString(R.string.save)) }
-                        )
+                        }
                     }
-
-                }
+                ) {}
+                //end:Device Form
             }
-        ) {}
-        //end:Device Form
+        }
     }
 }
 
@@ -1320,387 +1328,405 @@ fun DeviceDashboard(
         }
         composeProgressStatus.value = false
     } else {
-        val scope = rememberCoroutineScope()
-        var deviceDetail by remember { mutableStateOf<Device>(dummyDevice) }
-        var chkNotificationCheckState by remember { mutableStateOf(false) }
-        chkNotificationCheckState = deviceDetail.istracking ?: null == true
-        var chkMissingCheckState by remember { mutableStateOf(false) }
-        chkMissingCheckState = deviceDetail.ismissing ?: null == true
-        val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
-        var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
-        val cameraState = rememberCameraState {
-            geoPoint = GeoPoint(0.0, 0.0)
-            zoom = 19.0 // optional, default is 5.0
-        }
 
-        SideEffect {
-            deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
-
-            //start:Map Properties
-            val geopoint =
-                GeoPoint(deviceDetail.latitude!!.toDouble(), deviceDetail.longitude!!.toDouble())
-            cameraState.geoPoint = geopoint
-            mapMarkerState.geoPoint = geopoint
-
-            mapProperties = mapProperties
-                .copy(isTilesScaledToDpi = true)
-                .copy(tileSources = TileSourceFactory.MAPNIK)
-                .copy(isEnableRotationGesture = false)
-                .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
-            scope.launch {
-                delay(320)
-                composeProgressStatus.value = false
+        val notificationPermission=NotificationPermission(context)
+        if(!notificationPermission.first){
+            LaunchedEffect(Unit) {
+                delay(300)
+                notificationPermission.second.launchPermissionRequest()
             }
+            composeProgressStatus.value = false
         }
-        //end:Map Properties
+        else {
+            val scope = rememberCoroutineScope()
+            var deviceDetail by remember { mutableStateOf<Device>(dummyDevice) }
+            var chkNotificationCheckState by remember { mutableStateOf(false) }
+            chkNotificationCheckState = deviceDetail.istracking ?: null == true
+            var chkMissingCheckState by remember { mutableStateOf(false) }
+            chkMissingCheckState = deviceDetail.ismissing ?: null == true
+            val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
+            var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
+            val cameraState = rememberCameraState {
+                geoPoint = GeoPoint(0.0, 0.0)
+                zoom = 19.0 // optional, default is 5.0
+            }
 
-        val workManager = WorkManager.getInstance(context)
+            SideEffect {
+                deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
 
-        var trackWorkRequest = OneTimeWorkRequestBuilder<TrackWorker>()
-            .setInputData(
-                Data.Builder().putString("macaddress", macaddress!!.uppercase(Locale.ROOT)).build()
-            )
-            .build()
+                //start:Map Properties
+                val geopoint =
+                    GeoPoint(
+                        deviceDetail.latitude!!.toDouble(),
+                        deviceDetail.longitude!!.toDouble()
+                    )
+                cameraState.geoPoint = geopoint
+                mapMarkerState.geoPoint = geopoint
 
+                mapProperties = mapProperties
+                    .copy(isTilesScaledToDpi = true)
+                    .copy(tileSources = TileSourceFactory.MAPNIK)
+                    .copy(isEnableRotationGesture = false)
+                    .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+                scope.launch {
+                    delay(320)
+                    composeProgressStatus.value = false
+                }
+            }
+            //end:Map Properties
 
-        Scaffold(
-            bottomBar = {
-                BottomAppBar(
-                    actions = {
-                        IconButton(onClick = { navController.navigate(Screen.Dashboard.route) }) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.baseline_home_24),
-                                contentDescription = null
-                            )
-                        }
-                        IconButton(onClick = { navController.navigate(Screen.Profile.route) }) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.baseline_person_24),
-                                contentDescription = null
-                            )
-                        }
-                        IconButton(onClick = { navController.navigate(Screen.Preference.route) }) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.baseline_settings_24),
-                                contentDescription = null
-                            )
-                        }
-                    },
-                    floatingActionButton = {
-                        FloatingActionButton(
-                            containerColor = Color.Green,
-                            shape = CircleShape,
-                            onClick = {
-                                navController.navigate(Screen.Dashboard.route)
-                            },
-                            content = {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.baseline_arrow_back_24),
-                                    contentDescription = ""
-                                )
-                            }
-                        )
-                    },
+            val workManager = WorkManager.getInstance(context)
+
+            var trackWorkRequest = OneTimeWorkRequestBuilder<TrackWorker>()
+                .setInputData(
+                    Data.Builder().putString("macaddress", macaddress!!.uppercase(Locale.ROOT))
+                        .build()
                 )
-            }
-        ) { it ->
-            Column(modifier = Modifier.padding(it)) {
-                OpenStreetMap(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp),
-                    cameraState = cameraState,
-                    properties = mapProperties
-                ) { Marker(state = mapMarkerState) }
-                HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(colorResource(id = R.color.devicedashboardbackground))
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(20.dp)
-                    ) {
-                        Text(
-                            text = deviceDetail.name,
-                            style = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold),
-                            color = Color.White
-                        )
-                        Text(
-                            text = "${deviceDetail.macaddress.uppercase(Locale.ROOT)} ${deviceDetail.registerdate}",
-                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Light),
-                            color = Color.White
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp)
-                        ) {
-                            ElevatedButton(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .alpha(.7f)
-                                    .fillMaxHeight(),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonColors(
-                                    containerColor = Color.Black,
-                                    disabledContainerColor = Color.LightGray,
-                                    contentColor = Color.White,
-                                    disabledContentColor = Color.DarkGray
-                                ),
-                                onClick = {
-                                    navController.navigate("trackmydevice/${deviceDetail.macaddress}")
-                                }) {
+                .build()
+
+
+            Scaffold(
+                bottomBar = {
+                    BottomAppBar(
+                        actions = {
+                            IconButton(onClick = { navController.navigate(Screen.Dashboard.route) }) {
                                 Icon(
-                                    painter = painterResource(id = R.drawable.baseline_track_changes_24),
-                                    tint = Color.Red,
-                                    modifier = Modifier.size(48.dp),
+                                    painter = painterResource(id = R.drawable.baseline_home_24),
                                     contentDescription = null
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                val txttrack = String.format(
-                                    context.getString(R.string.tracking),
-                                    "\n${deviceDetail.name}"
-                                )
-                                Text(text = txttrack, color = Color.White)
                             }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            ElevatedButton(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .alpha(.7f)
-                                    .fillMaxHeight(),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonColors(
-                                    containerColor = Color.Black,
-                                    disabledContainerColor = Color.LightGray,
-                                    contentColor = Color.White,
-                                    disabledContentColor = Color.DarkGray
-                                ),
-                                onClick = {
-                                    navController.navigate("findmydevice/${deviceDetail.macaddress}")
-                                }) {
+                            IconButton(onClick = { navController.navigate(Screen.Profile.route) }) {
                                 Icon(
-                                    painter = painterResource(id = R.drawable.baseline_wifi_find_24),
-                                    tint = Color.Red,
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .alpha(.7f),
+                                    painter = painterResource(id = R.drawable.baseline_person_24),
                                     contentDescription = null
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                val txtfindmydevice = String.format(
-                                    context.getString(R.string.findmydevice),
-                                    "\n${deviceDetail.name}"
-                                )
-                                Text(text = txtfindmydevice, color = Color.White)
                             }
-                        }
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp)
-                        ) {
-                            ElevatedCard(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .alpha(.7f)
-                                    .fillMaxHeight(),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = CardColors(
-                                    containerColor = Color.Black,
-                                    disabledContainerColor = Color.LightGray,
-                                    contentColor = Color.White,
-                                    disabledContentColor = Color.DarkGray
-                                ),
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.Center,
-                                    horizontalAlignment = Alignment.CenterHorizontally
+                            IconButton(onClick = { navController.navigate(Screen.Preference.route) }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.baseline_settings_24),
+                                    contentDescription = null
                                 )
-                                {
-                                    Switch(
-                                        checked = chkNotificationCheckState,
-                                        onCheckedChange = { cc ->
-                                            //track switch onchecked
-                                            MainScope().launch {
-                                                val getloc =
-                                                    AppFusedLocationRepo(context).startCurrentLocation()
-                                                        .cancellable().first()
-                                                delay(100)
-                                                if (!cc) {
-                                                    workManager.cancelWorkById(trackWorkRequest.id)
-                                                    deviceDetail.istracking = null
-                                                } else {
-                                                    workManager.enqueue(trackWorkRequest)
-                                                    deviceDetail.istracking = true
-                                                    deviceDetail.ismissing = null
-                                                }
-                                                deviceDetail.longitude =
-                                                    getloc.longitude.toString()
-                                                deviceDetail.latitude =
-                                                    getloc.latitude.toString()
-                                                userviewModel.addUpdateDevice(deviceDetail)
-                                                    .flowOn(Dispatchers.Default).cancellable()
-                                                    .collect { result ->
-                                                        when (result) {
-                                                            null -> {
-                                                                DoNothing()
-                                                            }
-
-                                                            else -> {
-                                                                if (result.resultFlag.flag == 1) {
-                                                                    if (cc) {
-                                                                        chkMissingCheckState = false
-                                                                        Toast.makeText(
-                                                                            context,
-                                                                            "Tracking servisi açıldı.",
-                                                                            Toast.LENGTH_LONG
-                                                                        ).show()
-                                                                    } else
-                                                                        Toast.makeText(
-                                                                            context,
-                                                                            "Tracking servisi kapatıldı.",
-                                                                            Toast.LENGTH_LONG
-                                                                        ).show()
-                                                                } else {
-                                                                    if (result.error != null) {
-                                                                        Toast.makeText(
-                                                                            context,
-                                                                            "Error : ${result.error!!.code}, Exception : ${result.error!!.exception} ",
-                                                                            Toast.LENGTH_LONG
-                                                                        ).show()
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                            }
-                                            chkNotificationCheckState = cc
-
-                                        },
-                                        thumbContent = if (chkNotificationCheckState) {
-                                            {
-                                                Icon(
-                                                    imageVector = Icons.Filled.Check,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(SwitchDefaults.IconSize),
-                                                )
-                                            }
-                                        } else {
-                                            null
-                                        }
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = context.getString(R.string.trackingnotification),
-                                        color = Color.White,
-                                        style = TextStyle(textAlign = TextAlign.Center)
+                            }
+                        },
+                        floatingActionButton = {
+                            FloatingActionButton(
+                                containerColor = Color.Green,
+                                shape = CircleShape,
+                                onClick = {
+                                    navController.navigate(Screen.Dashboard.route)
+                                },
+                                content = {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.baseline_arrow_back_24),
+                                        contentDescription = ""
                                     )
                                 }
-                            }
-
-                            Spacer(modifier = Modifier.width(10.dp))
-                            ElevatedCard(
+                            )
+                        },
+                    )
+                }
+            ) { it ->
+                Column(modifier = Modifier.padding(it)) {
+                    OpenStreetMap(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp),
+                        cameraState = cameraState,
+                        properties = mapProperties
+                    ) { Marker(state = mapMarkerState) }
+                    HorizontalDivider(thickness = 3.dp, modifier = Modifier.fillMaxWidth())
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(colorResource(id = R.color.devicedashboardbackground))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(20.dp)
+                        ) {
+                            Text(
+                                text = deviceDetail.name,
+                                style = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                            Text(
+                                text = "${deviceDetail.macaddress.uppercase(Locale.ROOT)} ${deviceDetail.registerdate}",
+                                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Light),
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Row(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .alpha(.7f)
-                                    .fillMaxHeight(),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = CardColors(
-                                    containerColor = Color.Black,
-                                    disabledContainerColor = Color.LightGray,
-                                    contentColor = Color.White,
-                                    disabledContentColor = Color.DarkGray
-                                ),
+                                    .fillMaxWidth()
+                                    .height(120.dp)
                             ) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.Center,
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                )
-                                {
-                                    Switch(
-                                        checked = chkMissingCheckState,
-                                        onCheckedChange = {
-                                            MainScope().launch {
-                                                val getloc =
-                                                    AppFusedLocationRepo(context).startCurrentLocation()
-                                                        .cancellable().first()
-                                                delay(100)
-                                                if (!it)
-                                                    deviceDetail.ismissing = null
-                                                else {
-                                                    deviceDetail.istracking = null
-                                                    deviceDetail.ismissing = true
-                                                }
-                                                deviceDetail.longitude =
-                                                    getloc.longitude.toString()
-                                                deviceDetail.latitude =
-                                                    getloc.latitude.toString()
-                                                userviewModel.addUpdateDevice(deviceDetail)
-                                                    .flowOn(Dispatchers.Default).cancellable()
-                                                    .collect { result ->
-                                                        when (result) {
-                                                            null -> {
-                                                                DoNothing()
-                                                            }
+                                ElevatedButton(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .alpha(.7f)
+                                        .fillMaxHeight(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonColors(
+                                        containerColor = Color.Black,
+                                        disabledContainerColor = Color.LightGray,
+                                        contentColor = Color.White,
+                                        disabledContentColor = Color.DarkGray
+                                    ),
+                                    onClick = {
+                                        navController.navigate("trackmydevice/${deviceDetail.macaddress}")
+                                    }) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.baseline_track_changes_24),
+                                        tint = Color.Red,
+                                        modifier = Modifier.size(48.dp),
+                                        contentDescription = null
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    val txttrack = String.format(
+                                        context.getString(R.string.tracking),
+                                        "\n${deviceDetail.name}"
+                                    )
+                                    Text(text = txttrack, color = Color.White)
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                ElevatedButton(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .alpha(.7f)
+                                        .fillMaxHeight(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonColors(
+                                        containerColor = Color.Black,
+                                        disabledContainerColor = Color.LightGray,
+                                        contentColor = Color.White,
+                                        disabledContentColor = Color.DarkGray
+                                    ),
+                                    onClick = {
+                                        navController.navigate("findmydevice/${deviceDetail.macaddress}")
+                                    }) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.baseline_wifi_find_24),
+                                        tint = Color.Red,
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .alpha(.7f),
+                                        contentDescription = null
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    val txtfindmydevice = String.format(
+                                        context.getString(R.string.findmydevice),
+                                        "\n${deviceDetail.name}"
+                                    )
+                                    Text(text = txtfindmydevice, color = Color.White)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(120.dp)
+                            ) {
+                                ElevatedCard(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .alpha(.7f)
+                                        .fillMaxHeight(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = CardColors(
+                                        containerColor = Color.Black,
+                                        disabledContainerColor = Color.LightGray,
+                                        contentColor = Color.White,
+                                        disabledContentColor = Color.DarkGray
+                                    ),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.Center,
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    )
+                                    {
+                                        Switch(
+                                            checked = chkNotificationCheckState,
+                                            onCheckedChange = { cc ->
 
-                                                            else -> {
-                                                                if (result.resultFlag.flag == 1) {
-                                                                    if (it) {
-                                                                        chkNotificationCheckState =
-                                                                            false
-                                                                        Toast.makeText(
-                                                                            context,
-                                                                            "Missing Listesine Eklendi",
-                                                                            Toast.LENGTH_LONG
-                                                                        ).show()
-                                                                    } else
-                                                                        Toast.makeText(
-                                                                            context,
-                                                                            "Missing Listesinden Çıkarıldı",
-                                                                            Toast.LENGTH_LONG
-                                                                        ).show()
-                                                                } else {
-                                                                    if (result.error != null) {
-                                                                        Toast.makeText(
-                                                                            context,
-                                                                            "Error : ${result.error!!.code}, Exception : ${result.error!!.exception} ",
-                                                                            Toast.LENGTH_LONG
-                                                                        ).show()
+
+                                                //track switch onchecked
+                                                MainScope().launch {
+                                                    val getloc =
+                                                        AppFusedLocationRepo(context).startCurrentLocation()
+                                                            .cancellable().first()
+                                                    delay(100)
+                                                    if (!cc) {
+                                                        workManager.cancelWorkById(trackWorkRequest.id)
+                                                        deviceDetail.istracking = null
+                                                    } else {
+                                                        workManager.enqueue(trackWorkRequest)
+                                                        deviceDetail.istracking = true
+                                                        deviceDetail.ismissing = null
+                                                    }
+                                                    deviceDetail.longitude =
+                                                        getloc.longitude.toString()
+                                                    deviceDetail.latitude =
+                                                        getloc.latitude.toString()
+                                                    userviewModel.addUpdateDevice(deviceDetail)
+                                                        .flowOn(Dispatchers.Default).cancellable()
+                                                        .collect { result ->
+                                                            when (result) {
+                                                                null -> {
+                                                                    DoNothing()
+                                                                }
+
+                                                                else -> {
+                                                                    if (result.resultFlag.flag == 1) {
+                                                                        if (cc) {
+                                                                            chkMissingCheckState =
+                                                                                false
+                                                                            Toast.makeText(
+                                                                                context,
+                                                                                "Tracking servisi açıldı.",
+                                                                                Toast.LENGTH_LONG
+                                                                            ).show()
+                                                                        } else
+                                                                            Toast.makeText(
+                                                                                context,
+                                                                                "Tracking servisi kapatıldı.",
+                                                                                Toast.LENGTH_LONG
+                                                                            ).show()
+                                                                    } else {
+                                                                        if (result.error != null) {
+                                                                            Toast.makeText(
+                                                                                context,
+                                                                                "Error : ${result.error!!.code}, Exception : ${result.error!!.exception} ",
+                                                                                Toast.LENGTH_LONG
+                                                                            ).show()
+                                                                        }
                                                                     }
                                                                 }
                                                             }
                                                         }
-                                                    }
-                                            }
+                                                }
+                                                chkNotificationCheckState = cc
 
-                                            chkMissingCheckState = it
-                                        },
-                                        thumbContent = if (chkMissingCheckState) {
-                                            {
-                                                Icon(
-                                                    imageVector = Icons.Filled.Check,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(SwitchDefaults.IconSize),
-                                                )
+                                            },
+                                            thumbContent = if (chkNotificationCheckState) {
+                                                {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Check,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize),
+                                                    )
+                                                }
+                                            } else {
+                                                null
                                             }
-                                        } else {
-                                            null
-                                        }
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = context.getString(R.string.trackingnotification),
+                                            color = Color.White,
+                                            style = TextStyle(textAlign = TextAlign.Center)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(10.dp))
+                                ElevatedCard(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .alpha(.7f)
+                                        .fillMaxHeight(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = CardColors(
+                                        containerColor = Color.Black,
+                                        disabledContainerColor = Color.LightGray,
+                                        contentColor = Color.White,
+                                        disabledContentColor = Color.DarkGray
+                                    ),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize(),
+                                        verticalArrangement = Arrangement.Center,
+                                        horizontalAlignment = Alignment.CenterHorizontally
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = context.getString(R.string.missing),
-                                        color = Color.White,
-                                        style = TextStyle(textAlign = TextAlign.Center)
-                                    )
+                                    {
+                                        Switch(
+                                            checked = chkMissingCheckState,
+                                            onCheckedChange = {
+                                                MainScope().launch {
+                                                    val getloc =
+                                                        AppFusedLocationRepo(context).startCurrentLocation()
+                                                            .cancellable().first()
+                                                    delay(100)
+                                                    if (!it)
+                                                        deviceDetail.ismissing = null
+                                                    else {
+                                                        deviceDetail.istracking = null
+                                                        deviceDetail.ismissing = true
+                                                    }
+                                                    deviceDetail.longitude =
+                                                        getloc.longitude.toString()
+                                                    deviceDetail.latitude =
+                                                        getloc.latitude.toString()
+                                                    userviewModel.addUpdateDevice(deviceDetail)
+                                                        .flowOn(Dispatchers.Default).cancellable()
+                                                        .collect { result ->
+                                                            when (result) {
+                                                                null -> {
+                                                                    DoNothing()
+                                                                }
+
+                                                                else -> {
+                                                                    if (result.resultFlag.flag == 1) {
+                                                                        if (it) {
+                                                                            chkNotificationCheckState =
+                                                                                false
+                                                                            Toast.makeText(
+                                                                                context,
+                                                                                "Missing Listesine Eklendi",
+                                                                                Toast.LENGTH_LONG
+                                                                            ).show()
+                                                                        } else
+                                                                            Toast.makeText(
+                                                                                context,
+                                                                                "Missing Listesinden Çıkarıldı",
+                                                                                Toast.LENGTH_LONG
+                                                                            ).show()
+                                                                    } else {
+                                                                        if (result.error != null) {
+                                                                            Toast.makeText(
+                                                                                context,
+                                                                                "Error : ${result.error!!.code}, Exception : ${result.error!!.exception} ",
+                                                                                Toast.LENGTH_LONG
+                                                                            ).show()
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                }
+
+                                                chkMissingCheckState = it
+                                            },
+                                            thumbContent = if (chkMissingCheckState) {
+                                                {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Check,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(SwitchDefaults.IconSize),
+                                                    )
+                                                }
+                                            } else {
+                                                null
+                                            }
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = context.getString(R.string.missing),
+                                            color = Color.White,
+                                            style = TextStyle(textAlign = TextAlign.Center)
+                                        )
+                                    }
                                 }
                             }
                         }

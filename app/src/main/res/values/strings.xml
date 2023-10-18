@@ -10,6 +10,8 @@
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
     <string name="ireadandunderstand">I read and understood</string>
+    <string name="iunderstand">I am understanding.</string>
+    <string name="ok">OK</string>
     <string name="signupprivacypolicybutton">Privacy Policy</string>
     <string name="signuppleasedisplayandreadprivacy">Please display and read privacy policy!</string>
     <string name="limit">Limit</string>
@@ -92,4 +94,19 @@
     <string name="pre_tr">TR</string>
     <string name="pre_en">EN</string>
     <!--End::Preference-->
+    <!--Start::Location Permission-->
+    <string name="pms_locationtitle">Location Permission</string>
+    <string name="pms_locationrationale">Allow Ivocabo to access your location to provide accurate information and improve your experience with our location-based services. We utilize location tracking to keep track of the last known location of the Ivocabo device even when it goes out of range. This helps us ensure that we can provide you with relevant notifications and updates when you are in proximity to the beacon. Rest assured that your location data will only be used within the app and will not be shared with any third parties. Your privacy and data security are our top priorities.</string>
+    <string name="pms_locationdenied">We need your permission because we need to monitor the connection between your phone and the Ivocabo device, even when the app is not in use or closed. This allows us to notify you when the connection with the Ivocabo device is lost and provide its last known location. By granting location permission, you can access the device\'s location information even if you miss the notification. Rest assured that we respect your privacy and ensure that your location data is used solely for these purposes. Your personal data will never be sold or shared for any purpose facilitating sale. For more information about how we handle your data, please review our privacy policy.</string>
+    <!--End::Location Permission-->
+    <!--Start::Bluetooth Permission-->
+    <string name="pms_bluetoothtitle">Bluetooth Permission</string>
+    <string name="pms_bluetoothrationale">Allow Ivocabo to find and determine the relative position of nearby and Ivocabo devices?</string>
+    <string name="pms_bluetoothdenied">A Bluetooth connection is required to connect to Ivocabo. Since this connection depends on your approval, we kindly ask you to enter the application information in the settings of your mobile phone and grant Bluetooth permissions manually.</string>
+    <!--End::Bluetooth Permission-->
+    <!--Start::Notification Permission-->
+    <string name="pms_notificationtitle">Notification Permission</string>
+    <string name="pms_notificationrationale">You must allow this service to notify you of disconnections while tracking the Ivocabo device. We kindly request that you please go to the application information in your mobile phone settings and allow notifications under the permissions tab.</string>
+    <string name="pms_notificationdenied">Notification Permission denied. You must allow this service to notify you of disconnections while monitoring the Ivocabo device. We kindly request that you please go to the application information in your mobile phone settings and allow notifications under the permissions tab.</string>
+    <!--End::Notification Permission-->
 </resources>

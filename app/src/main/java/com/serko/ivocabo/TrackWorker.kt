@@ -2,7 +2,9 @@ package com.serko.ivocabo
 
 import android.app.NotificationManager
 import android.bluetooth.le.ScanFilter
+import android.content.ContentResolver
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
@@ -44,13 +46,17 @@ class TrackWorker @AssistedInject constructor(
 ) :
     CoroutineWorker(context, parameters) {
     val _context = context
+    private lateinit var soundUri: Uri
+
     override suspend fun doWork(): Result {
         //get remote missing device list
         try {
+            soundUri =
+                Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + _context.packageName + "/" + R.raw.alarm)
             var dataMacaddress = inputData.getString("macaddress")
             if (!dataMacaddress.isNullOrEmpty()) {
                 dataMacaddress = dataMacaddress.uppercase(Locale.ROOT)
-                setForeground(createForegroundInfo(String.format(applicationContext.getString(R.string.ntf_scanning),dataMacaddress)))
+                setForeground(createForegroundInfo(String.format(applicationContext.getString(R.string.ntf_scanning),dataMacaddress),soundUri))
 
                 val bluetoothScanService = BluetoothScanService(_context)
 
@@ -74,7 +80,7 @@ class TrackWorker @AssistedInject constructor(
                 delay(200)
                 var disconnectedCounter=0
                 val disconnectedContent=String.format(applicationContext.getString(R.string.ntf_summary),dataMacaddress)
-                val stillconnectedContent=String.format(applicationContext.getString(R.string.ntf_bigtextstillconnected),dataMacaddress)
+                //val stillconnectedContent=String.format(applicationContext.getString(R.string.ntf_bigtextstillconnected),dataMacaddress)
                 bluetoothScanService.bluetoothScannerResults().flowOn(Dispatchers.Default).cancellable()
                     .collect{rlt->
                         if (!rlt.isNullOrEmpty()) {
@@ -84,22 +90,20 @@ class TrackWorker @AssistedInject constructor(
                                     if (dvScanResult == null) {
                                         disconnectedCounter = disconnectedCounter + 1
                                         if (disconnectedCounter >= 10) {
-                                            setForeground(createForegroundInfo(disconnectedContent))
-
-                                            //device can not be reached
+                                            setForeground(createForegroundInfo(disconnectedContent,soundUri))
                                         }
                                     }
-                                    else {
+                                    /*else {
                                         disconnectedCounter = 0
                                         setForeground(createForegroundInfo(stillconnectedContent))
-                                    }
+                                    }*/
                                 }
 
                                 else -> {
                                     disconnectedCounter = disconnectedCounter + 1
                                     if (disconnectedCounter >= 10) {
                                         //device can not be reached
-                                        setForeground(createForegroundInfo(disconnectedContent))
+                                        setForeground(createForegroundInfo(disconnectedContent,soundUri))
                                     }
                                 }
                             }
@@ -107,7 +111,7 @@ class TrackWorker @AssistedInject constructor(
                             disconnectedCounter = disconnectedCounter + 1
                             if (disconnectedCounter >= 10) {
                                 //device can not be reached
-                                setForeground(createForegroundInfo(disconnectedContent))
+                                setForeground(createForegroundInfo(disconnectedContent,soundUri))
                             }
                         }
                     }
@@ -118,7 +122,7 @@ class TrackWorker @AssistedInject constructor(
         return Result.success()
     }
 
-    private fun createForegroundInfo(content: String): ForegroundInfo {
+    private fun createForegroundInfo(content: String,soundUri:Uri): ForegroundInfo {
         val id = "ivoNotification"
         val notificationId=Math.random().roundToInt()
         val title = applicationContext.getString(R.string.ntf_title)
@@ -134,6 +138,7 @@ class TrackWorker @AssistedInject constructor(
             .setContentText(content)
             .setSmallIcon(R.drawable.baseline_track_changes_24)
             .setOngoing(true)
+            .setSound(soundUri)
             // Add the cancel action to the notification which can
             // be used to cancel the worker
             .addAction(android.R.drawable.ic_delete, cancel, intent)
