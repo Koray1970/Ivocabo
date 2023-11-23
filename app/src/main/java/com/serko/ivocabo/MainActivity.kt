@@ -293,7 +293,7 @@ fun Dashboard(
             locationPermissionStatus.second.launchMultiplePermissionRequest()
         }
     } else {
-        val bluetoothPermissionStatus= BluetoothPermission(context)
+        val bluetoothPermissionStatus = BluetoothPermission(context)
         if (!bluetoothPermissionStatus.first) {
             LaunchedEffect(Unit) {
                 delay(300)
@@ -840,9 +840,7 @@ fun SignIn(
                     })
                 TextField(value = passwordVal,
                     onValueChange = {
-                        if (passwordVal.length < passwordLimit) {
-                            passwordVal = it
-                        }
+                            passwordVal = it.take(passwordLimit)
                     },
                     placeholder = { Text(text = context.getString(R.string.password)) },
                     label = { Text(text = context.getString(R.string.password)) },
@@ -865,10 +863,19 @@ fun SignIn(
                     trailingIcon = {
                         var iconResource = R.drawable.baseline_visibility_off_24
                         if (passwordVisible) iconResource = R.drawable.baseline_visibility_24
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(
-                                painter = painterResource(iconResource), contentDescription = ""
-                            )
+                        Row() {
+                            IconButton(onClick = { passwordVal = "" }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.baseline_clear_24),
+                                    contentDescription = ""
+                                )
+                            }
+
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    painter = painterResource(iconResource), contentDescription = ""
+                                )
+                            }
                         }
                     })
                 Row(
@@ -1121,9 +1128,7 @@ fun Signup(
                         })
                     TextField(value = passwordVal,
                         onValueChange = {
-                            if (passwordVal.length < passwordLimit) {
-                                passwordVal = it
-                            }
+                            passwordVal = it.take(passwordLimit)
                         },
                         placeholder = { Text(text = context.getString(R.string.password)) },
                         label = { Text(text = context.getString(R.string.password)) },
@@ -1146,10 +1151,19 @@ fun Signup(
                         trailingIcon = {
                             var iconResource = R.drawable.baseline_visibility_off_24
                             if (passwordVisible) iconResource = R.drawable.baseline_visibility_24
-                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                Icon(
-                                    painter = painterResource(iconResource), contentDescription = ""
-                                )
+                            Row() {
+                                IconButton(onClick = { passwordVal = "" }) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.baseline_clear_24),
+                                        contentDescription = ""
+                                    )
+                                }
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(
+                                        painter = painterResource(iconResource),
+                                        contentDescription = ""
+                                    )
+                                }
                             }
                         })
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1329,15 +1343,14 @@ fun DeviceDashboard(
         composeProgressStatus.value = false
     } else {
 
-        val notificationPermission=NotificationPermission(context)
-        if(!notificationPermission.first){
+        val notificationPermission = NotificationPermission(context)
+        if (!notificationPermission.first) {
             LaunchedEffect(Unit) {
                 delay(300)
                 notificationPermission.second.launchPermissionRequest()
             }
             composeProgressStatus.value = false
-        }
-        else {
+        } else {
             val scope = rememberCoroutineScope()
             var deviceDetail by remember { mutableStateOf<Device>(dummyDevice) }
             var chkNotificationCheckState by remember { mutableStateOf(false) }

@@ -64,13 +64,13 @@ dependencies {
 
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
-    implementation("androidx.activity:activity-compose:1.8.0")
+    implementation("androidx.activity:activity-compose:1.8.1")
     implementation(platform("androidx.compose:compose-bom:2023.10.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3:1.2.0-alpha10")
-    implementation("androidx.hilt:hilt-navigation-compose:1.1.0-rc01")
+    implementation("androidx.compose.material3:material3:1.2.0-alpha11")
+    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:logging-interceptor:5.0.0-alpha.11")
@@ -81,8 +81,8 @@ dependencies {
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation(platform("androidx.compose:compose-bom:2023.10.01"))
     implementation("androidx.core:core-splashscreen:1.1.0-alpha02")
-    implementation("androidx.compose.runtime:runtime:1.6.0-alpha08")
-    implementation("androidx.compose.runtime:runtime-livedata:1.6.0-alpha08")
+    implementation("androidx.compose.runtime:runtime:1.6.0-beta01")
+    implementation("androidx.compose.runtime:runtime-livedata:1.6.0-beta01")
     implementation("tech.utsmankece:osm-android-compose:0.0.5")
     implementation("androidx.work:work-runtime-ktx:2.8.1")
     //implementation("androidx.compose.runtime:runtime-livedata:1.6.0-alpha06")
@@ -93,7 +93,7 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation(platform("androidx.compose:compose-bom:2023.10.01"))
     debugImplementation("androidx.compose.ui:ui-tooling")
-    debugImplementation("androidx.compose.ui:ui-test-manifest:1.6.0-alpha08")
+    debugImplementation("androidx.compose.ui:ui-test-manifest:1.6.0-beta01")
     implementation("com.google.dagger:hilt-android:2.48.1")
     kapt("com.google.dagger:hilt-android-compiler:2.48.1")
 
@@ -104,22 +104,22 @@ dependencies {
     annotationProcessor("androidx.room:room-compiler:$room_version")
 
     // To use Kotlin annotation processing tool (kapt)
-    //kapt("androidx.room:room-compiler:$room_version")
+    kapt("androidx.room:room-compiler:$room_version")
     // To use Kotlin Symbol Processing (KSP)
-    ksp("androidx.room:room-compiler:$room_version")
+    //ksp("androidx.room:room-compiler:$room_version")
 
     // optional - Kotlin Extensions and Coroutines support for Room
     implementation("androidx.room:room-ktx:$room_version")
 
     /*start:: jetpack navigation*/
     val nav_version = "2.7.3"
-    implementation("androidx.navigation:navigation-compose:2.7.4")
+    implementation("androidx.navigation:navigation-compose:2.7.5")
     //hilt work injection
-    implementation("androidx.hilt:hilt-work:1.0.0")
+    implementation("androidx.hilt:hilt-work:1.1.0")
     // When using Kotlin.
-    kapt("androidx.hilt:hilt-compiler:1.0.0")
+    kapt("androidx.hilt:hilt-compiler:1.1.0")
     // When using Java.
-    annotationProcessor("androidx.hilt:hilt-compiler:1.0.0")
+    annotationProcessor("androidx.hilt:hilt-compiler:1.1.0")
 }
 // Allow references to generated code
 kapt {
