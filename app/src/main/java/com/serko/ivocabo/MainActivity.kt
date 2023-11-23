@@ -274,7 +274,7 @@ fun DoNothing() {}
 @Composable
 fun Dashboard(
     navController: NavController = rememberNavController(),
-    composeProgressStatus: MutableState<Boolean>,
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
     userviewModel: userViewModel = hiltViewModel(),
 ) {
     composeProgressStatus.value = true
@@ -753,7 +753,7 @@ fun ForgetPassword(navController: NavController) {
 @Composable
 fun SignIn(
     navController: NavController,
-    composeProgressStatus: MutableState<Boolean>,
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
     userviewModel: userViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current.applicationContext
@@ -840,7 +840,7 @@ fun SignIn(
                     })
                 TextField(value = passwordVal,
                     onValueChange = {
-                            passwordVal = it.take(passwordLimit)
+                        passwordVal = it.take(passwordLimit)
                     },
                     placeholder = { Text(text = context.getString(R.string.password)) },
                     label = { Text(text = context.getString(R.string.password)) },
@@ -890,7 +890,7 @@ fun SignIn(
                     Button(onClick = {
                         usernameError = formHelper.checkUsername(usernameVal)
                         passwordError = formHelper.checkPassword(passwordVal)
-                        if (!(usernameError && passwordError)) {
+                        if (usernameError && passwordError) {
                             try {
                                 if (IApiService.apiService == null)
                                     IApiService.getInstance()
@@ -910,31 +910,54 @@ fun SignIn(
                                             scope.launch {
                                                 val countOfUser = userviewModel.getCountofUser()
 
-                                                if (countOfUser > 0) {
-                                                    val user = userviewModel.fetchUser()
-                                                    user.token = rmResult.token
-                                                    userviewModel.updateUser(user)
+                                                if (rmResult.eventResult.error != null) {
+                                                    composeProgressStatus.value = false
+                                                    when(rmResult.eventResult.error?.code) {
+                                                        "SIN010" -> {
+                                                            Toast.makeText(
+                                                                context,
+                                                                "User Not Found!",
+                                                                Toast.LENGTH_LONG
+                                                            ).show()
+                                                        }
+
+                                                        else -> {
+                                                            Toast.makeText(
+                                                                context,
+                                                                "Please try again!",
+                                                                Toast.LENGTH_LONG
+                                                            ).show()
+                                                        }
+                                                    }
+
                                                 } else {
-                                                    val username = rmResult.username!!
-                                                    val email = rmResult.email!!
-                                                    userviewModel.insertUser(
-                                                        User(
-                                                            0,
-                                                            helper.getNOWasSQLDate(),
-                                                            username,
-                                                            email,
-                                                            rmResult.token,
-                                                            if (rmResult.devicelist != null) {
-                                                                gson.toJson(rmResult.devicelist)
-                                                            } else {
-                                                                null
-                                                            }
+                                                    if (countOfUser > 0) {
+                                                        val user = userviewModel.fetchUser()
+                                                        user.token = rmResult.token
+                                                        userviewModel.updateUser(user)
+                                                    } else {
+                                                        val username = rmResult.username!!
+                                                        val email = rmResult.email!!
+                                                        userviewModel.insertUser(
+                                                            User(
+                                                                0,
+                                                                helper.getNOWasSQLDate(),
+                                                                username,
+                                                                email,
+                                                                rmResult.token,
+                                                                if (rmResult.devicelist != null) {
+                                                                    gson.toJson(rmResult.devicelist)
+                                                                } else {
+                                                                    null
+                                                                }
+                                                            )
                                                         )
-                                                    )
+                                                    }
+
+                                                    composeProgressStatus.value = false
+                                                    delay(120)
+                                                    navController.navigate(Screen.Dashboard.route)
                                                 }
-                                                composeProgressStatus.value = false
-                                                delay(120)
-                                                navController.navigate(Screen.Dashboard.route)
                                             }
                                         }
                                     }
@@ -978,7 +1001,7 @@ fun SignIn(
 @Composable
 fun Signup(
     navController: NavController,
-    composeProgressStatus: MutableState<Boolean>,
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
     userviewModel: userViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current.applicationContext
@@ -1326,7 +1349,7 @@ fun Signup(
 fun DeviceDashboard(
     macaddress: String?,
     navController: NavController,
-    composeProgressStatus: MutableState<Boolean>,
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
     userviewModel: userViewModel = hiltViewModel(),
     //locationViewModel: LocationViewModel = hiltViewModel()
 ) {
@@ -1768,7 +1791,7 @@ var metricDistanceTextStyle = mutableStateOf<TextStyle>(defaultMetricTextStyle)
 fun ComposeScanResultUI(
     context: Context,
     macaddress: String,
-    composeProgressStatus: MutableState<Boolean>
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false)
 ) {
     metricDistance.value = context.getString(R.string.scanning)
     var disconnectedCounter = 0
@@ -1873,7 +1896,7 @@ fun ComposeScanResultUI(
 fun FindMyDevice(
     macaddress: String?,
     navController: NavController,
-    composeProgressStatus: MutableState<Boolean>,
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
     userviewModel: userViewModel = hiltViewModel(),
 ) {
     composeProgressStatus.value = true
@@ -2011,7 +2034,7 @@ fun FindMyDevice(
 fun TrackMyDevice(
     macaddress: String?,
     navController: NavController,
-    composeProgressStatus: MutableState<Boolean>,
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
     userviewModel: userViewModel = hiltViewModel(),
 ) {
 
@@ -2154,7 +2177,7 @@ fun TrackMyDevice(
 @Composable
 fun Profile(
     navController: NavController,
-    composeProgressStatus: MutableState<Boolean>,
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
     userviewModel: userViewModel = hiltViewModel()
 ) {
     val scope = rememberCoroutineScope()
@@ -2321,7 +2344,7 @@ fun Profile(
 @Composable
 fun Preference(
     navController: NavController,
-    composeProgressStatus: MutableState<Boolean>,
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
     userviewModel: userViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current.applicationContext
