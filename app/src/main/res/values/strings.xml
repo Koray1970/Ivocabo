@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Ivocabo</string>
     <string name="dbname">ivocabodb.db</string>
-    <string name="privacypolicyurl">https://www.ivocabo.com/gi-zli-li-k-poli-ti-kasi</string>
+    <string name="privacypolicyurl">https://www.ivocabo.com/mobilappgizlilikpolitikasi</string>
     <string name="signupTitle">Sign Up</string>
     <string name="username">Username</string>
     <string name="email">Email</string>

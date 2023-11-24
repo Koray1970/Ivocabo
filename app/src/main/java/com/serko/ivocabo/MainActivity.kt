@@ -197,7 +197,10 @@ class MainActivity : ComponentActivity() {
             }
         }
         setContent {
-            IvocaboTheme {
+            IvocaboTheme(
+                darkTheme = false,
+                dynamicColor = false
+            ) {
                 // A surface container using the 'background' color from the theme
 
                 Surface(
