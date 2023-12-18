@@ -3,6 +3,7 @@ package com.serko.ivocabo.data
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.util.Log
+import androidx.collection.emptyIntFloatMap
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
@@ -29,6 +30,8 @@ import com.serko.ivocabo.Helper
 import com.serko.ivocabo.IvocaboApplication
 import com.serko.ivocabo.R
 import com.serko.ivocabo.api.IApiService
+import com.serko.ivocabo.bluetooth.BluetoothActivity
+import com.serko.ivocabo.bluetooth.ScanningDeviceItem
 import com.serko.ivocabo.remote.device.addupdate.DeviceAddUpdateRequest
 import com.serko.ivocabo.remote.membership.EventResult
 import com.serko.ivocabo.remote.membership.EventResultFlags
@@ -40,7 +43,13 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import retrofit2.Call
 import retrofit2.Callback
@@ -141,7 +150,9 @@ class userViewModel @Inject constructor(
     val gson = Gson()
     var user: User?
     var isUserSignIn = MutableStateFlow(false)
+
     var devicelist = mutableListOf<Device>()
+
 
     var mutablelivedataRMEventResult =
         MutableStateFlow<RMEventResult<Boolean>>(RMEventResult(false))
@@ -195,23 +206,47 @@ class userViewModel @Inject constructor(
     }
 
     //device events
-    fun getDeviceFlowList(): Flow<SnapshotStateList<Device>> = callbackFlow {
-        viewModelScope.launch {
-
+    fun getDeviceFlowList(): Flow<MutableList<Device>> = flow {
+        while (true) {
             var dbdevices = repo.getDevices()
             if (dbdevices != null) {
                 if (dbdevices.isNotEmpty()) {
-                    trySend(
+                    emit(
                         gson.fromJson<List<Device>>(
                             dbdevices,
                             object : TypeToken<List<Device>>() {}.type
-                        ).sortedBy { a->a.name }.toMutableStateList()
+                        ).sortedBy { a -> a.name }.toMutableStateList()
                     )
                 }
             }
+            delay(1600)
         }
-        awaitClose()
     }
+
+    fun getScanDeviceList(): Flow<List<String>> = flow<List<String>> {
+        val mList = mutableListOf<String>()
+        while (true) {
+            var dbdevices = repo.getDevices()
+            if (dbdevices != null) {
+                if (dbdevices.isNotEmpty()) {
+                    val dd = gson.fromJson<List<Device>>(
+                        dbdevices,
+                        object : TypeToken<List<Device>>() {}.type
+                    ).toMutableStateList()
+                    if (dd.isNotEmpty()) {
+                        dd.forEach { f ->
+                            if (f.istracking != null && f.istracking == true) {
+                                BluetoothActivity.scanningDeviceList.add(ScanningDeviceItem(f.macaddress.uppercase()))
+                            } else {
+                                BluetoothActivity.scanningDeviceList.removeIf { a -> a.macaddress.uppercase() == f.macaddress.uppercase() }
+                            }
+                        }
+                    }
+                }
+            }
+            delay(2000)
+        }
+    }.distinctUntilChanged()
 
 
     fun getDbDeviceList() {
@@ -285,6 +320,7 @@ class userViewModel @Inject constructor(
                     IApiService.getInstance()
                 val apiSrv = IApiService.apiService
 
+
                 val dEviceRequest = DeviceAddUpdateRequest(
                     date = helper.getNowAsJsonString(),
                     description = null,
@@ -307,7 +343,6 @@ class userViewModel @Inject constructor(
                     ) {
                         //Log.v("MainActivity","remote Response : ${response.raw().code}")
                         if (response.isSuccessful) {
-
                             if (response.body()?.eventresultflag == EventResultFlags.SUCCESS.flag) {
 
                                 funResult = FormActionResult<Boolean>(true)
@@ -330,7 +365,6 @@ class userViewModel @Inject constructor(
                                 funResult?.error?.exception = eMessage
                                 trySend(funResult)
                             }
-
                         }
                     }
 

@@ -56,7 +56,7 @@ class TrackWorker @AssistedInject constructor(
             var dataMacaddress = inputData.getString("macaddress")
             if (!dataMacaddress.isNullOrEmpty()) {
                 dataMacaddress = dataMacaddress.uppercase(Locale.ROOT)
-                setForeground(createForegroundInfo(String.format(applicationContext.getString(R.string.ntf_scanning),dataMacaddress),soundUri))
+                setForeground(createForegroundInfo(String.format(applicationContext.getString(R.string.ntf_scanning),dataMacaddress),null))
 
                 val bluetoothScanService = BluetoothScanService(_context)
 
@@ -122,7 +122,7 @@ class TrackWorker @AssistedInject constructor(
         return Result.success()
     }
 
-    private fun createForegroundInfo(content: String,soundUri:Uri): ForegroundInfo {
+    private fun createForegroundInfo(content: String,soundUri:Uri?): ForegroundInfo {
         val id = "ivoNotification"
         val notificationId=Math.random().roundToInt()
         val title = applicationContext.getString(R.string.ntf_title)
@@ -138,12 +138,13 @@ class TrackWorker @AssistedInject constructor(
             .setContentText(content)
             .setSmallIcon(R.drawable.baseline_track_changes_24)
             .setOngoing(true)
-            .setSound(soundUri)
+            //.setSound(soundUri)
             // Add the cancel action to the notification which can
             // be used to cancel the worker
             .addAction(android.R.drawable.ic_delete, cancel, intent)
-            .build()
-
-        return ForegroundInfo(notificationId, notification)
+            //.build()
+        if(soundUri!=null)
+            notification.setSound(soundUri)
+        return ForegroundInfo(notificationId, notification.build())
     }
 }
