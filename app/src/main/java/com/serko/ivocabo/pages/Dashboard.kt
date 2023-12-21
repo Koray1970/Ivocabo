@@ -31,8 +31,6 @@ import androidx.compose.material3.BottomAppBarDefaults
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.DismissDirection
-import androidx.compose.material3.DismissValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
@@ -44,11 +42,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetValue
-import androidx.compose.material3.SwipeToDismiss
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.material3.rememberDismissState
+import androidx.compose.material3.rememberSwipeToDismissState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -82,21 +81,14 @@ import com.google.accompanist.permissions.MultiplePermissionsState
 import com.google.android.gms.maps.model.LatLng
 import com.serko.ivocabo.BluetoothPermission
 import com.serko.ivocabo.DeviceFormHelper
-import com.serko.ivocabo.pages.DoNothing
 import com.serko.ivocabo.FormDeviceItem
 import com.serko.ivocabo.LocationPermission
 import com.serko.ivocabo.NotificationPermission
 import com.serko.ivocabo.R
-import com.serko.ivocabo.bluetooth.BluetoothScanService
-import com.serko.ivocabo.pages.bluetoothScanService
 import com.serko.ivocabo.data.Device
 import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
 import com.serko.ivocabo.data.userViewModel
-import com.serko.ivocabo.pages.dummyDevice
-import com.serko.ivocabo.pages.formTitle
-import com.serko.ivocabo.pages.gson
-import com.serko.ivocabo.pages.helper
 import com.serko.ivocabo.location.AppFusedLocationRepo
 import com.utsman.osmandcompose.DefaultMapProperties
 import com.utsman.osmandcompose.Marker
@@ -157,7 +149,9 @@ fun Dashboard(
                 composeProgressStatus.value = false
             } else {
                 val scope = rememberCoroutineScope()
-                bluetoothScanService = BluetoothScanService(context)
+                //bluetoothScanService = BluetoothScanService(context)
+
+
                 var currentLocation by remember { mutableStateOf(LatLng(0.0, 0.0)) }
                 val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
                 var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
@@ -209,7 +203,8 @@ fun Dashboard(
                 val deviceFormScaffoldState = rememberBottomSheetScaffoldState()
                 //var devicelist = remember { mutableListOf<Device>() }
                 val devicelistFlowState =
-                    userviewModel.getDeviceFlowList().collectAsStateWithLifecycle(initialValue =  mutableListOf<Device>())
+                    userviewModel.getDeviceFlowList()
+                        .collectAsStateWithLifecycle(initialValue = mutableListOf<Device>())
 
                 composeProgressStatus.value = false
                 //end::Device Form assets
@@ -281,59 +276,55 @@ fun Dashboard(
                         ) {
                             itemsIndexed(devicelistFlowState.value) { _, dd ->
                                 var deviceDismissShow by remember { mutableStateOf(true) }
-                                val deviceDismissState =
-                                    rememberDismissState(confirmValueChange = { dismissValue ->
-                                        when (dismissValue) {
-                                            DismissValue.DismissedToStart -> {
-                                                userviewModel.DeleteDevice(dd)
-                                                deviceDismissShow = false
-                                                true
-                                            }
+                                val deviceDismissState = rememberSwipeToDismissState()
+                                /* rememberDismissState(confirmValueChange = { dismissValue ->
+                                     when (dismissValue) {
+                                         DismissValue.DismissedToStart -> {
+                                             userviewModel.DeleteDevice(dd)
+                                             deviceDismissShow = false
+                                             true
+                                         }
 
-                                            DismissValue.DismissedToEnd -> {
-                                                scope.launch {
-                                                    composeProgressStatus.value = true
-                                                    delay(300)
-                                                    deviceFormScaffoldState.bottomSheetState.expand()
-                                                }
-                                                deviceDismissShow = false
-                                                true
-                                            }
+                                         DismissValue.DismissedToEnd -> {
+                                             scope.launch {
+                                                 composeProgressStatus.value = true
+                                                 delay(300)
+                                                 deviceFormScaffoldState.bottomSheetState.expand()
+                                             }
+                                             deviceDismissShow = false
+                                             true
+                                         }
 
-                                            else -> false
-                                        }
+                                         else -> false
+                                     }
 
-                                    }, positionalThreshold = { 150f })
+                                 }, positionalThreshold = { 150f })*/
                                 AnimatedVisibility(deviceDismissShow, exit = fadeOut(spring())) {
-                                    SwipeToDismiss(state = deviceDismissState,
-                                        directions = setOf(DismissDirection.EndToStart),
-                                        background = {
-                                            val direction = deviceDismissState.dismissDirection
-                                                ?: return@SwipeToDismiss
+                                    SwipeToDismissBox(
+                                        enableDismissFromStartToEnd = false,
+                                        enableDismissFromEndToStart = true,
+                                        state = deviceDismissState,
+                                        backgroundContent = {
                                             val color by animateColorAsState(
                                                 when (deviceDismissState.targetValue) {
-                                                    DismissValue.Default -> Color.LightGray
-                                                    DismissValue.DismissedToEnd -> Color.Green
-                                                    else -> Color.Red
+                                                    SwipeToDismissValue.Settled -> Color.LightGray
+                                                    SwipeToDismissValue.StartToEnd -> Color.Green
+                                                    SwipeToDismissValue.EndToStart -> Color.Red
                                                 }, label = ""
                                             )
-                                            val eventIcon = when (direction) {
-                                                DismissDirection.StartToEnd -> R.drawable.baseline_edit_24
-                                                DismissDirection.EndToStart -> R.drawable.baseline_delete_24
+                                            val eventIcon = when (deviceDismissState.targetValue) {
+                                                SwipeToDismissValue.EndToStart -> R.drawable.baseline_delete_24
+                                                else -> R.drawable.baseline_edit_24
                                             }
                                             val boxIconScale by animateFloatAsState(
-                                                targetValue = if (deviceDismissState.targetValue == DismissValue.Default) .8f else 1.2f,
+                                                targetValue = if (deviceDismissState.targetValue == SwipeToDismissValue.Settled) .8f else 1.2f,
                                                 label = ""
                                             )
-                                            val boxAlignment = when (direction) {
-                                                DismissDirection.StartToEnd -> Alignment.CenterStart
-                                                DismissDirection.EndToStart -> Alignment.CenterEnd
-                                            }
                                             Box(
                                                 Modifier
                                                     .fillMaxSize()
                                                     .background(color),
-                                                contentAlignment = boxAlignment
+                                                contentAlignment = Alignment.CenterEnd
                                             ) {
                                                 Icon(
                                                     painter = painterResource(id = eventIcon),
@@ -343,45 +334,44 @@ fun Dashboard(
                                                         .padding(start = 24.dp, end = 24.dp)
                                                 )
                                             }
-                                        },
-                                        dismissContent = {
-                                            Card(
-                                                modifier = Modifier.clickable(onClick = {
-                                                    networkLocation.stopLocationJob.tryEmit(true)
-                                                    navController.navigate("devicedashboard/${dd.macaddress}")
-                                                }),
-                                                shape = RoundedCornerShape(0.dp),
-                                            ) {
-                                                ListItem(leadingContent = {
-                                                    var deviceIcon = R.drawable.t3_icon_32
-                                                    if (dd.devicetype == 2) deviceIcon =
-                                                        R.drawable.e9_icon_32
-                                                    Icon(
-                                                        painter = painterResource(id = deviceIcon),
-                                                        contentDescription = null,
-                                                        tint = Color.DarkGray
+                                        }) {
+                                        Card(
+                                            modifier = Modifier.clickable(onClick = {
+                                                networkLocation.stopLocationJob.tryEmit(true)
+                                                navController.navigate("devicedashboard/${dd.macaddress}")
+                                            }),
+                                            shape = RoundedCornerShape(0.dp),
+                                        ) {
+                                            ListItem(leadingContent = {
+                                                var deviceIcon = R.drawable.t3_icon_32
+                                                if (dd.devicetype == 2) deviceIcon =
+                                                    R.drawable.e9_icon_32
+                                                Icon(
+                                                    painter = painterResource(id = deviceIcon),
+                                                    contentDescription = null,
+                                                    tint = Color.DarkGray
+                                                )
+                                            }, headlineContent = {
+                                                Text(
+                                                    text = dd.name.uppercase(Locale.ROOT),
+                                                    style = TextStyle(
+                                                        color = Color.DarkGray,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        fontSize = 16.sp
                                                     )
-                                                }, headlineContent = {
-                                                    Text(
-                                                        text = dd.name.uppercase(Locale.ROOT),
-                                                        style = TextStyle(
-                                                            color = Color.DarkGray,
-                                                            fontWeight = FontWeight.ExtraBold,
-                                                            fontSize = 16.sp
-                                                        )
+                                                )
+                                            }, supportingContent = {
+                                                Text(
+                                                    text = dd.macaddress.uppercase(Locale.ROOT),
+                                                    style = TextStyle(
+                                                        color = Color.Gray,
+                                                        fontWeight = FontWeight.SemiBold,
                                                     )
-                                                }, supportingContent = {
-                                                    Text(
-                                                        text = dd.macaddress.uppercase(Locale.ROOT),
-                                                        style = TextStyle(
-                                                            color = Color.Gray,
-                                                            fontWeight = FontWeight.SemiBold,
-                                                        )
-                                                    )
-                                                })
-                                                HorizontalDivider()
-                                            }
-                                        })
+                                                )
+                                            })
+                                            HorizontalDivider()
+                                        }
+                                    }
                                 }
                             }
                         }

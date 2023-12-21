@@ -2,9 +2,11 @@ package com.serko.ivocabo
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.le.ScanFilter
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
@@ -20,20 +22,27 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.serko.ivocabo.bluetooth.BleScanner
+import com.serko.ivocabo.bluetooth.BleScannerScanState
 import com.serko.ivocabo.bluetooth.BluetoothActivity
 import com.serko.ivocabo.bluetooth.BluetoothStatusObserver
 import com.serko.ivocabo.bluetooth.IBluetoothStatusObserver
 import com.serko.ivocabo.bluetooth.ScanningDeviceItem
 import com.serko.ivocabo.data.userViewModel
 import com.serko.ivocabo.pages.ComposeProgress
+import com.serko.ivocabo.pages.gson
 import com.serko.ivocabo.ui.theme.IvocaboTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.cancellable
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -45,12 +54,18 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    val userViewModel: userViewModel by viewModels()
+
+    companion object {
+        lateinit var bleScanner: BleScanner
+    }
+
     @SuppressLint("MissingPermission")
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         //applicationContext.deleteDatabase(applicationContext.getString(R.string.dbname))
-        val userViewModel:userViewModel by viewModels()
+
         hideSystemUI()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
@@ -68,12 +83,25 @@ class MainActivity : ComponentActivity() {
             }
             println("BluetoothStatus : ${it.name}")
         }.launchIn(lifecycleScope)
-
-
+        var kk = 0
+        bleScanner = BleScanner(applicationContext)
         MainScope().launch {
-            userViewModel.getScanDeviceList().collect()
+            userViewModel.getScanDeviceList().flowOn(Dispatchers.Default).cancellable().collect {
+                Log.v("MainActivity", "kk=${kk++}")
+                if (it.isNotEmpty()) {
+                    BleScanner.scanFilters.removeIf { a -> it.none { g -> g == a.deviceAddress } }
+                    it.forEach { a ->
+                        BleScanner.scanFilters.add(ScanFilter.Builder().setDeviceAddress(a).build())
+                    }
+                    BleScanner.SCAN_STATE.value = BleScannerScanState.START_SCAN
+                    bleScanner.getScanResults().collect { h ->
+                        Log.v("MainActivity", gson.toJson(h))
+                    }
+                } else
+                    BleScanner.SCAN_STATE.value = BleScannerScanState.STOP_SCAN
+            }
         }
-        val bluetoothActivity = BluetoothActivity(applicationContext)
+        //val bluetoothActivity = BluetoothActivity(applicationContext)
 
         setContent {
             IvocaboTheme(

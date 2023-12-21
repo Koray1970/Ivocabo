@@ -1,6 +1,7 @@
 package com.serko.ivocabo.data
 
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.le.ScanFilter
 import android.content.Context
 import android.util.Log
 import androidx.collection.emptyIntFloatMap
@@ -223,30 +224,36 @@ class userViewModel @Inject constructor(
         }
     }
 
-    fun getScanDeviceList(): Flow<List<String>> = flow<List<String>> {
-        val mList = mutableListOf<String>()
-        while (true) {
-            var dbdevices = repo.getDevices()
-            if (dbdevices != null) {
-                if (dbdevices.isNotEmpty()) {
-                    val dd = gson.fromJson<List<Device>>(
-                        dbdevices,
-                        object : TypeToken<List<Device>>() {}.type
-                    ).toMutableStateList()
-                    if (dd.isNotEmpty()) {
-                        dd.forEach { f ->
-                            if (f.istracking != null && f.istracking == true) {
-                                BluetoothActivity.scanningDeviceList.add(ScanningDeviceItem(f.macaddress.uppercase()))
-                            } else {
-                                BluetoothActivity.scanningDeviceList.removeIf { a -> a.macaddress.uppercase() == f.macaddress.uppercase() }
+    fun getScanDeviceList(): Flow<MutableList<String>> =
+        flow<MutableList<String>> {
+            var mList = mutableListOf<String>()
+            while (true) {
+                var dbdevices = repo.getDevices()
+                if (dbdevices != null) {
+                    if (dbdevices.isNotEmpty()) {
+                        val dd = gson.fromJson<List<Device>>(
+                            dbdevices,
+                            object : TypeToken<List<Device>>() {}.type
+                        ).toMutableStateList()
+                        if (dd.isNotEmpty()) {
+                            dd.forEach { f ->
+                                if (f.istracking != null && f.istracking == true) {
+                                    if (mList.none { a -> a == f.macaddress.uppercase() })
+                                        mList.add(f.macaddress.uppercase())
+                                    //BluetoothActivity.scanningDeviceList.add(ScanningDeviceItem(f.macaddress.uppercase()))
+                                }
                             }
+                        } else {
+                            mList.clear()
                         }
-                    }
-                }
+                    } else
+                        mList.clear()
+                } else
+                    mList.clear()
+                emit(mList)
+                delay(2000)
             }
-            delay(2000)
-        }
-    }.distinctUntilChanged()
+        }//.distinctUntilChanged()
 
 
     fun getDbDeviceList() {

@@ -1,7 +1,10 @@
 package com.serko.ivocabo.pages
 
+import android.bluetooth.le.ScanFilter
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,9 +63,12 @@ import androidx.work.WorkManager
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.serko.ivocabo.BluetoothPermission
+import com.serko.ivocabo.MainActivity
 import com.serko.ivocabo.NotificationPermission
 import com.serko.ivocabo.R
 import com.serko.ivocabo.TrackWorker
+import com.serko.ivocabo.bluetooth.BleScanner
+import com.serko.ivocabo.bluetooth.BleScannerScanState
 import com.serko.ivocabo.bluetooth.BluetoothActivity
 import com.serko.ivocabo.bluetooth.ScanningDeviceItem
 import com.serko.ivocabo.data.Device
@@ -150,12 +156,18 @@ fun DeviceDashboard(
             }
             //end:Map Properties
 
-            /*val workManager = WorkManager.getInstance(context)
+            val workManager = WorkManager.getInstance(context)
 
-            var trackWorkRequest = OneTimeWorkRequestBuilder<TrackWorker>().setInputData(
+            /*var trackWorkRequest = OneTimeWorkRequestBuilder<TrackWorker>().setInputData(
                 Data.Builder().putString("macaddress", macaddress!!.uppercase(Locale.ROOT))
                     .build()
-            ).build()*/
+            ).build()
+            if (deviceDetail.istracking != null)
+                if (deviceDetail.istracking == true)
+                    workManager.enqueue(trackWorkRequest)
+                else
+                    workManager.cancelWorkById(trackWorkRequest.id)*/
+
 
 
             Scaffold(bottomBar = {
@@ -314,7 +326,7 @@ fun DeviceDashboard(
                                     ) {
                                         Switch(checked = chkNotificationCheckState,
                                             onCheckedChange = { cc ->
-                                                val mmc=macaddress!!.uppercase(Locale.ROOT)
+                                                val mmc = macaddress!!.uppercase(Locale.ROOT)
 
 
                                                 //track switch onchecked
@@ -354,11 +366,42 @@ fun DeviceDashboard(
                                                                                 "Tracking servisi açıldı.",
                                                                                 Toast.LENGTH_LONG
                                                                             ).show()
-                                                                        } else Toast.makeText(
-                                                                            context,
-                                                                            "Tracking servisi kapatıldı.",
-                                                                            Toast.LENGTH_LONG
-                                                                        ).show()
+
+                                                                        } else {
+                                                                            Toast.makeText(
+                                                                                context,
+                                                                                "Tracking servisi kapatıldı.",
+                                                                                Toast.LENGTH_LONG
+                                                                            ).show()
+                                                                        }
+
+                                                                        BleScanner.SCAN_STATE.value =
+                                                                            BleScannerScanState.STOP_SCAN
+                                                                        delay(200)
+                                                                        userviewModel.getScanDeviceList()
+                                                                            .flowOn(Dispatchers.Default)
+                                                                            .cancellable().collect {
+                                                                                if (it.isNotEmpty()) {
+                                                                                    BleScanner.scanFilters.removeIf { a -> it.none { g -> g == a.deviceAddress } }
+                                                                                    it.forEach { a ->
+                                                                                        if (BleScanner.scanFilters.none { h -> h.deviceAddress == deviceDetail.macaddress.uppercase() })
+                                                                                            BleScanner.scanFilters.add(
+                                                                                                ScanFilter.Builder()
+                                                                                                    .setDeviceAddress(
+                                                                                                        a
+                                                                                                    )
+                                                                                                    .build()
+                                                                                            )
+                                                                                    }
+                                                                                    if (BleScanner.scanFilters.size > 0) {
+                                                                                        BleScanner.SCAN_STATE.value =
+                                                                                            BleScannerScanState.START_SCAN
+                                                                                    }
+                                                                                } else
+                                                                                    BleScanner.SCAN_STATE.value =
+                                                                                        BleScannerScanState.STOP_SCAN
+                                                                            }
+
                                                                     } else {
                                                                         if (result.error != null) {
                                                                             Toast.makeText(
