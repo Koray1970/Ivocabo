@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +43,7 @@ import com.google.accompanist.permissions.MultiplePermissionsState
 import com.serko.ivocabo.BluetoothPermission
 import com.serko.ivocabo.NotificationPermission
 import com.serko.ivocabo.R
+import com.serko.ivocabo.bluetooth.BleScanner
 import com.serko.ivocabo.pages.bluetoothScanService
 import com.serko.ivocabo.data.userViewModel
 import com.serko.ivocabo.pages.dummyDevice
@@ -49,6 +51,7 @@ import com.serko.ivocabo.pages.metricDistance
 import com.serko.ivocabo.pages.metricDistanceTextStyle
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -57,10 +60,9 @@ import java.util.Locale
 fun TrackMyDevice(
     macaddress: String?,
     navController: NavController,
-    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
-    userviewModel: userViewModel = hiltViewModel(),
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false)
 ) {
-
+    val userviewModel = hiltViewModel<userViewModel>()
     val context = LocalContext.current.applicationContext
 
     val bluetoothPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
@@ -90,20 +92,24 @@ fun TrackMyDevice(
             if (deviceDetail.devicetype != null) if (deviceDetail.devicetype == 2) deviceIcon =
                 R.drawable.e9_icon_32
             val _macaddress = macaddress.uppercase(Locale.ROOT)
-            ComposeScanResultUI(
-                context = context,
-                macaddress = _macaddress,
-                composeProgressStatus = composeProgressStatus
-            )
+
+            LaunchedEffect(Unit) {
+
+                if (!BleScanner.scanFilters.isNullOrEmpty()) {
+
+                }
+                userviewModel.getDeviceScanResult(_macaddress).collect {
+                    metricDistance.value = it
+                    composeProgressStatus.value = false
+                }
+            }
 
             Scaffold(
                 floatingActionButton = {
                     FloatingActionButton(containerColor = Color.Green,
                         shape = CircleShape,
                         onClick = {
-                            bluetoothScanService.scanJonState.tryEmit(true)
                             MainScope().launch {
-
                                 delay(300)
                                 navController.navigate("devicedashboard/${deviceDetail.macaddress}")
                             }

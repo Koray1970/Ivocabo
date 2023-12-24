@@ -10,6 +10,7 @@ import android.util.Log
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -30,9 +31,12 @@ import com.serko.ivocabo.bluetooth.BluetoothActivity
 import com.serko.ivocabo.bluetooth.BluetoothStatusObserver
 import com.serko.ivocabo.bluetooth.IBluetoothStatusObserver
 import com.serko.ivocabo.bluetooth.ScanningDeviceItem
+import com.serko.ivocabo.data.BleScanViewModel
+import com.serko.ivocabo.data.ScanResultItem
 import com.serko.ivocabo.data.userViewModel
 import com.serko.ivocabo.pages.ComposeProgress
 import com.serko.ivocabo.pages.gson
+import com.serko.ivocabo.pages.helper
 import com.serko.ivocabo.ui.theme.IvocaboTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
@@ -55,9 +59,25 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     val userViewModel: userViewModel by viewModels()
+    val bleScanViewModel: BleScanViewModel by viewModels()
 
     companion object {
         lateinit var bleScanner: BleScanner
+    }
+
+    override fun onLowMemory() {
+        Toast.makeText(applicationContext, "Uygulama onLowMemory!!", Toast.LENGTH_LONG).show()
+        super.onLowMemory()
+    }
+
+    override fun onResume() {
+        Toast.makeText(applicationContext, "Uygulama onResume!!", Toast.LENGTH_LONG).show()
+        super.onResume()
+    }
+
+    override fun onPause() {
+        Toast.makeText(applicationContext, "Uygulama onPause!!", Toast.LENGTH_LONG).show()
+        super.onPause()
     }
 
     @SuppressLint("MissingPermission")
@@ -89,16 +109,44 @@ class MainActivity : ComponentActivity() {
             userViewModel.getScanDeviceList().flowOn(Dispatchers.Default).cancellable().collect {
                 Log.v("MainActivity", "kk=${kk++}")
                 if (it.isNotEmpty()) {
-                    BleScanner.scanFilters.removeIf { a -> it.none { g -> g == a.deviceAddress } }
+                    if (BleScanner.scanFilters.isNullOrEmpty())
+                        BleScanner.scanFilters = mutableListOf<ScanFilter>()
+                    if (BleScanner.scanFilters!!.size > 0)
+                        BleScanner.scanFilters!!.removeIf { a -> it.none { g -> g == a.deviceAddress } }
                     it.forEach { a ->
-                        BleScanner.scanFilters.add(ScanFilter.Builder().setDeviceAddress(a).build())
+                        BleScanner.scanFilters!!.add(
+                            ScanFilter.Builder().setDeviceAddress(a).build()
+                        )
                     }
                     BleScanner.SCAN_STATE.value = BleScannerScanState.START_SCAN
-                    bleScanner.getScanResults().collect { h ->
-                        Log.v("MainActivity", gson.toJson(h))
-                    }
-                } else
+
+                } else {
+                    BleScanner.scanFilters = null
                     BleScanner.SCAN_STATE.value = BleScannerScanState.STOP_SCAN
+                }
+                bleScanner.getScanResults().collect { sr ->
+                    Log.v("MainActivity 1", gson.toJson(sr))
+                    if (BleScanner.scanFilters != null) {
+                        if (sr != null) {
+                            if (sr.isNotEmpty()) {
+                                sr.forEach { a ->
+                                    if (BleScanner.scanFilters!!.any { v -> v.deviceAddress == a.device.address }) {
+                                        bleScanViewModel.addAndUpdateScanResultList(
+                                            ScanResultItem(
+                                                macaddress = a.device.address,
+                                                rssi = a.rssi,
+                                                metricvalue = helper.CalculateRSSIToMeter(a.rssi)!!,
+                                                disconnectedcounter = null,
+                                            )
+                                        )
+                                    } else {
+
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         //val bluetoothActivity = BluetoothActivity(applicationContext)
@@ -112,7 +160,8 @@ class MainActivity : ComponentActivity() {
 
 
                 Surface(
-                    modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
                 ) {
                     AppNavigation(composeProgressDialogStatus)
                     ComposeProgress(dialogshow = composeProgressDialogStatus)
@@ -135,7 +184,8 @@ class MainActivity : ComponentActivity() {
         } else {
             window.insetsController?.apply {
                 hide(WindowInsets.Type.statusBars())
-                systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                systemBarsBehavior =
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         }
     }

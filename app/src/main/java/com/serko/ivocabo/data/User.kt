@@ -29,8 +29,10 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.serko.ivocabo.Helper
 import com.serko.ivocabo.IvocaboApplication
+import com.serko.ivocabo.MainActivity
 import com.serko.ivocabo.R
 import com.serko.ivocabo.api.IApiService
+import com.serko.ivocabo.bluetooth.BleScanner
 import com.serko.ivocabo.bluetooth.BluetoothActivity
 import com.serko.ivocabo.bluetooth.ScanningDeviceItem
 import com.serko.ivocabo.remote.device.addupdate.DeviceAddUpdateRequest
@@ -225,35 +227,33 @@ class userViewModel @Inject constructor(
     }
 
     fun getScanDeviceList(): Flow<MutableList<String>> =
-        flow<MutableList<String>> {
+        flow {
             var mList = mutableListOf<String>()
-            while (true) {
-                var dbdevices = repo.getDevices()
-                if (dbdevices != null) {
-                    if (dbdevices.isNotEmpty()) {
-                        val dd = gson.fromJson<List<Device>>(
-                            dbdevices,
-                            object : TypeToken<List<Device>>() {}.type
-                        ).toMutableStateList()
-                        if (dd.isNotEmpty()) {
-                            dd.forEach { f ->
-                                if (f.istracking != null && f.istracking == true) {
-                                    if (mList.none { a -> a == f.macaddress.uppercase() })
-                                        mList.add(f.macaddress.uppercase())
-                                    //BluetoothActivity.scanningDeviceList.add(ScanningDeviceItem(f.macaddress.uppercase()))
-                                }
+
+            var dbdevices = repo.getDevices()
+            if (dbdevices != null) {
+                if (dbdevices.isNotEmpty()) {
+                    val dd = gson.fromJson<List<Device>>(
+                        dbdevices,
+                        object : TypeToken<List<Device>>() {}.type
+                    ).toMutableStateList()
+                    if (dd.isNotEmpty()) {
+                        dd.forEach { f ->
+                            if (f.istracking != null && f.istracking == true) {
+                                if (mList.none { a -> a == f.macaddress.uppercase() })
+                                    mList.add(f.macaddress.uppercase())
+                                //BluetoothActivity.scanningDeviceList.add(ScanningDeviceItem(f.macaddress.uppercase()))
                             }
-                        } else {
-                            mList.clear()
                         }
-                    } else
+                    } else {
                         mList.clear()
+                    }
                 } else
                     mList.clear()
-                emit(mList)
-                delay(2000)
-            }
-        }//.distinctUntilChanged()
+            } else
+                mList.clear()
+            emit(mList)
+        }.distinctUntilChanged()
 
 
     fun getDbDeviceList() {
@@ -268,7 +268,6 @@ class userViewModel @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-
         }
     }
 
@@ -447,6 +446,22 @@ class userViewModel @Inject constructor(
         }
     }
 
+    fun getDeviceScanResult(macaddress: String): Flow<String> {
+        return callbackFlow {
+            trySend("Scanning...")
+            MainActivity.bleScanner.getScanResults().collect {
+                if (it != null) {
+                    if (it.isNotEmpty()) {
+                        if (it.any { a -> a.device.address == macaddress.uppercase() }) {
+                            val device =
+                                it.first { a -> a.device.address == macaddress.uppercase() }
+                            trySend(helper.CalculateRSSIToMeter(device.rssi).toString() + "mt")
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 enum class RMEventStatus { Initial, Running, Complete, Exception }

@@ -125,9 +125,11 @@ fun DeviceDashboard(
             val scope = rememberCoroutineScope()
             var deviceDetail by remember { mutableStateOf<Device>(dummyDevice) }
             var chkNotificationCheckState by remember { mutableStateOf(false) }
-            chkNotificationCheckState = deviceDetail.istracking ?: null == true
+            if (deviceDetail.istracking != null) chkNotificationCheckState =
+                deviceDetail.istracking == true
             var chkMissingCheckState by remember { mutableStateOf(false) }
-            chkMissingCheckState = deviceDetail.ismissing ?: null == true
+            if (deviceDetail.ismissing != null) chkMissingCheckState =
+                deviceDetail.ismissing == true
             val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
             var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
             val cameraState = rememberCameraState {
@@ -338,12 +340,34 @@ fun DeviceDashboard(
                                                     if (!cc) {
                                                         //workManager.cancelWorkById(trackWorkRequest.id)
                                                         deviceDetail.istracking = null
+                                                        userviewModel.getScanDeviceList().first()
+                                                            .remove(deviceDetail.macaddress.uppercase())
+                                                        if(BleScanner.scanFilters!=null) {
+                                                            BleScanner.scanFilters?.removeIf { a -> a.deviceAddress == deviceDetail.macaddress.uppercase() }
+                                                            if (BleScanner.scanFilters?.size == 0) {
+                                                                BleScanner.SCAN_STATE.value =
+                                                                    BleScannerScanState.STOP_SCAN
+                                                                BleScanner.scanFilters = null
+                                                            }
+                                                        }
 
                                                     } else {
                                                         //workManager.enqueue(trackWorkRequest)
+                                                        userviewModel.getScanDeviceList().first()
+                                                            .add(deviceDetail.macaddress.uppercase())
+                                                        if(BleScanner.scanFilters.isNullOrEmpty())
+                                                            BleScanner.scanFilters= mutableListOf<ScanFilter>()
+                                                        BleScanner.scanFilters?.add(
+                                                            ScanFilter.Builder()
+                                                                .setDeviceAddress(deviceDetail.macaddress.uppercase())
+                                                                .build()
+                                                        )
+                                                        if (BleScanner.SCAN_STATE.value == BleScannerScanState.STOP_SCAN) BleScanner.SCAN_STATE.value =
+                                                            BleScannerScanState.START_SCAN
                                                         deviceDetail.istracking = true
                                                         deviceDetail.ismissing = null
                                                     }
+
                                                     deviceDetail.longitude =
                                                         getloc.longitude.toString()
                                                     deviceDetail.latitude =
@@ -374,34 +398,10 @@ fun DeviceDashboard(
                                                                                 Toast.LENGTH_LONG
                                                                             ).show()
                                                                         }
-
-                                                                        BleScanner.SCAN_STATE.value =
-                                                                            BleScannerScanState.STOP_SCAN
-                                                                        delay(200)
-                                                                        userviewModel.getScanDeviceList()
-                                                                            .flowOn(Dispatchers.Default)
-                                                                            .cancellable().collect {
-                                                                                if (it.isNotEmpty()) {
-                                                                                    BleScanner.scanFilters.removeIf { a -> it.none { g -> g == a.deviceAddress } }
-                                                                                    it.forEach { a ->
-                                                                                        if (BleScanner.scanFilters.none { h -> h.deviceAddress == deviceDetail.macaddress.uppercase() })
-                                                                                            BleScanner.scanFilters.add(
-                                                                                                ScanFilter.Builder()
-                                                                                                    .setDeviceAddress(
-                                                                                                        a
-                                                                                                    )
-                                                                                                    .build()
-                                                                                            )
-                                                                                    }
-                                                                                    if (BleScanner.scanFilters.size > 0) {
-                                                                                        BleScanner.SCAN_STATE.value =
-                                                                                            BleScannerScanState.START_SCAN
-                                                                                    }
-                                                                                } else
-                                                                                    BleScanner.SCAN_STATE.value =
-                                                                                        BleScannerScanState.STOP_SCAN
+                                                                        MainActivity.bleScanner.getScanResults()
+                                                                            .collect { h ->
+                                                                                //Log.v("MainActivity", gson.toJson(h))
                                                                             }
-
                                                                     } else {
                                                                         if (result.error != null) {
                                                                             Toast.makeText(
@@ -414,9 +414,9 @@ fun DeviceDashboard(
                                                                 }
                                                             }
                                                         }
+
                                                 }
                                                 chkNotificationCheckState = cc
-
                                             },
                                             thumbContent = if (chkNotificationCheckState) {
                                                 {

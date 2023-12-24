@@ -64,7 +64,7 @@ fun ComposeScanResultUI(
                                     helper.CalculateRSSIToMeter(cRssi).toString() + "mt"
                                 Log.v("MainActivity", "bluetoothScannerResults 2.1")
                             } else {
-                                disconnectedCounter = disconnectedCounter + 1
+                                disconnectedCounter += 1
                                 Log.v("MainActivity", "bluetoothScannerResults 2.2")
                                 if (disconnectedCounter >= 10) {
                                     cRssi = null
@@ -75,7 +75,6 @@ fun ComposeScanResultUI(
                                 } else metricDistance.value =
                                     helper.CalculateRSSIToMeter(cRssi).toString() + "mt"
                             }
-
                         }
 
                         else -> {
@@ -83,7 +82,7 @@ fun ComposeScanResultUI(
                             if (cRssi != null) metricDistance.value =
                                 helper.CalculateRSSIToMeter(cRssi).toString() + "mt"
                             else metricDistance.value = context.getString(R.string.scanning)
-                            disconnectedCounter = disconnectedCounter + 1
+                            disconnectedCounter += 1
                             Log.v("MainActivity", "bluetoothScannerResults 3")
                             if (disconnectedCounter >= 10) {
                                 cRssi = null
@@ -99,7 +98,7 @@ fun ComposeScanResultUI(
                     if (cRssi != null) metricDistance.value =
                         helper.CalculateRSSIToMeter(cRssi).toString() + "mt"
                     else metricDistance.value = context.getString(R.string.scanning)
-                    disconnectedCounter = disconnectedCounter + 1
+                    disconnectedCounter += 1
                     if (disconnectedCounter >= 10) {
                         cRssi = null
                         metricDistanceTextStyle.value = scanningMetricTextStyle
