@@ -60,7 +60,7 @@ fun LocationPermission(context: Context): Pair<Boolean, MultiplePermissionsState
                 }
             }
 
-            android.Manifest.permission.ACCESS_COARSE_LOCATION -> {
+            android.Manifest.permission.ACCESS_FINE_LOCATION -> {
                 when {
                     permis.status.isGranted -> {
                         permissionStatus = true

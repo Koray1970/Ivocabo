@@ -47,6 +47,8 @@ class TrackWorker @AssistedInject constructor(
     CoroutineWorker(context, parameters) {
     val _context = context
     private lateinit var soundUri: Uri
+    private val TRACKING_COUNTER = 5
+    var DISCONNECTED_COUNTER = 0
 
     override suspend fun doWork(): Result {
         //get remote missing device list
@@ -56,9 +58,16 @@ class TrackWorker @AssistedInject constructor(
             var dataMacaddress = inputData.getString("macaddress")
             if (!dataMacaddress.isNullOrEmpty()) {
                 dataMacaddress = dataMacaddress.uppercase(Locale.ROOT)
-                setForeground(createForegroundInfo(String.format(applicationContext.getString(R.string.ntf_scanning),dataMacaddress),soundUri))
+                setForeground(
+                    createForegroundInfo(
+                        String.format(
+                            applicationContext.getString(R.string.ntf_scanning),
+                            dataMacaddress
+                        ), null
+                    )
+                )
 
-                val bluetoothScanService = BluetoothScanService(_context)
+                /*val bluetoothScanService = BluetoothScanService(_context)
 
                 //start::set scan list
                 if (bluetoothScanService.scanList.isNotEmpty()) {
@@ -78,43 +87,54 @@ class TrackWorker @AssistedInject constructor(
                     bluetoothScanService.scanJonState.tryEmit(true)
 
                 delay(200)
-                var disconnectedCounter=0
-                val disconnectedContent=String.format(applicationContext.getString(R.string.ntf_summary),dataMacaddress)
+
+                val disconnectedContent = String.format(
+                    applicationContext.getString(R.string.ntf_summary),
+                    dataMacaddress
+                )
                 //val stillconnectedContent=String.format(applicationContext.getString(R.string.ntf_bigtextstillconnected),dataMacaddress)
-                bluetoothScanService.bluetoothScannerResults().flowOn(Dispatchers.Default).cancellable()
-                    .collect{rlt->
+                bluetoothScanService.bluetoothScannerResults().flowOn(Dispatchers.Default)
+                    .cancellable()
+                    .collect { rlt ->
                         if (!rlt.isNullOrEmpty()) {
                             when (rlt.size) {
                                 1 -> {
-                                    var dvScanResult = rlt.first { a -> a.macaddress == dataMacaddress }
-                                    if (dvScanResult == null) {
-                                        disconnectedCounter = disconnectedCounter + 1
-                                        if (disconnectedCounter >= 10) {
-                                            setForeground(createForegroundInfo(disconnectedContent,soundUri))
+                                    if (rlt.none { a -> a.macaddress == dataMacaddress }) {
+                                        DISCONNECTED_COUNTER += 1
+                                        if (DISCONNECTED_COUNTER >= TRACKING_COUNTER) {
+                                            setForeground(
+                                                createForegroundInfo(
+                                                    disconnectedContent,
+                                                    soundUri
+                                                )
+                                            )
                                         }
+                                    } else {
+                                        DISCONNECTED_COUNTER = 0
                                     }
-                                    /*else {
-                                        disconnectedCounter = 0
-                                        setForeground(createForegroundInfo(stillconnectedContent))
-                                    }*/
                                 }
 
                                 else -> {
-                                    disconnectedCounter = disconnectedCounter + 1
-                                    if (disconnectedCounter >= 10) {
+                                    DISCONNECTED_COUNTER += 1
+                                    if (DISCONNECTED_COUNTER >= TRACKING_COUNTER) {
                                         //device can not be reached
-                                        setForeground(createForegroundInfo(disconnectedContent,soundUri))
+                                        setForeground(
+                                            createForegroundInfo(
+                                                disconnectedContent,
+                                                soundUri
+                                            )
+                                        )
                                     }
                                 }
                             }
                         } else {
-                            disconnectedCounter = disconnectedCounter + 1
-                            if (disconnectedCounter >= 10) {
+                            DISCONNECTED_COUNTER += 1
+                            if (DISCONNECTED_COUNTER >= TRACKING_COUNTER) {
                                 //device can not be reached
-                                setForeground(createForegroundInfo(disconnectedContent,soundUri))
+                                setForeground(createForegroundInfo(disconnectedContent, soundUri))
                             }
                         }
-                    }
+                    }*/
             }
         } catch (e: Exception) {
         }
@@ -122,12 +142,12 @@ class TrackWorker @AssistedInject constructor(
         return Result.success()
     }
 
-    private fun createForegroundInfo(content: String,soundUri:Uri): ForegroundInfo {
+    private fun createForegroundInfo(content: String, soundUri: Uri?): ForegroundInfo {
         val id = "ivoNotification"
-        val notificationId=Math.random().roundToInt()
+        val notificationId = Math.random().roundToInt()
         val title = applicationContext.getString(R.string.ntf_title)
         val cancel = applicationContext.getString(R.string.cancel)
-        var content=content
+        var content = content
         // This PendingIntent can be used to cancel the worker
         val intent = WorkManager.getInstance(applicationContext)
             .createCancelPendingIntent(getId())
@@ -137,13 +157,15 @@ class TrackWorker @AssistedInject constructor(
             .setTicker(title)
             .setContentText(content)
             .setSmallIcon(R.drawable.baseline_track_changes_24)
-            .setOngoing(true)
-            .setSound(soundUri)
+            //.setOngoing(true)
+            //.setSound(soundUri)
             // Add the cancel action to the notification which can
             // be used to cancel the worker
             .addAction(android.R.drawable.ic_delete, cancel, intent)
-            .build()
-
-        return ForegroundInfo(notificationId, notification)
+        //.build()
+        if (DISCONNECTED_COUNTER >= TRACKING_COUNTER)
+            if (soundUri != null)
+                notification.setSound(soundUri)
+        return ForegroundInfo(notificationId, notification.build())
     }
 }

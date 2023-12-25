@@ -1,8 +1,10 @@
 package com.serko.ivocabo.data
 
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.le.ScanFilter
 import android.content.Context
 import android.util.Log
+import androidx.collection.emptyIntFloatMap
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
@@ -27,8 +29,12 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.serko.ivocabo.Helper
 import com.serko.ivocabo.IvocaboApplication
+import com.serko.ivocabo.MainActivity
 import com.serko.ivocabo.R
 import com.serko.ivocabo.api.IApiService
+import com.serko.ivocabo.bluetooth.BleScanner
+import com.serko.ivocabo.bluetooth.BluetoothActivity
+import com.serko.ivocabo.bluetooth.ScanningDeviceItem
 import com.serko.ivocabo.remote.device.addupdate.DeviceAddUpdateRequest
 import com.serko.ivocabo.remote.membership.EventResult
 import com.serko.ivocabo.remote.membership.EventResultFlags
@@ -40,7 +46,13 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import retrofit2.Call
 import retrofit2.Callback
@@ -141,7 +153,9 @@ class userViewModel @Inject constructor(
     val gson = Gson()
     var user: User?
     var isUserSignIn = MutableStateFlow(false)
+
     var devicelist = mutableListOf<Device>()
+
 
     var mutablelivedataRMEventResult =
         MutableStateFlow<RMEventResult<Boolean>>(RMEventResult(false))
@@ -195,23 +209,51 @@ class userViewModel @Inject constructor(
     }
 
     //device events
-    fun getDeviceFlowList(): Flow<SnapshotStateList<Device>> = callbackFlow {
-        viewModelScope.launch {
+    fun getDeviceFlowList(): Flow<MutableList<Device>> = flow {
+        while (true) {
+            var dbdevices = repo.getDevices()
+            if (dbdevices != null) {
+                if (dbdevices.isNotEmpty()) {
+                    emit(
+                        gson.fromJson<List<Device>>(
+                            dbdevices,
+                            object : TypeToken<List<Device>>() {}.type
+                        ).sortedBy { a -> a.name }.toMutableStateList()
+                    )
+                }
+            }
+            delay(1600)
+        }
+    }
+
+    fun getScanDeviceList(): Flow<MutableList<String>> =
+        flow {
+            var mList = mutableListOf<String>()
 
             var dbdevices = repo.getDevices()
             if (dbdevices != null) {
                 if (dbdevices.isNotEmpty()) {
-                    trySend(
-                        gson.fromJson<List<Device>>(
-                            dbdevices,
-                            object : TypeToken<List<Device>>() {}.type
-                        ).sortedBy { a->a.name }.toMutableStateList()
-                    )
-                }
-            }
-        }
-        awaitClose()
-    }
+                    val dd = gson.fromJson<List<Device>>(
+                        dbdevices,
+                        object : TypeToken<List<Device>>() {}.type
+                    ).toMutableStateList()
+                    if (dd.isNotEmpty()) {
+                        dd.forEach { f ->
+                            if (f.istracking != null && f.istracking == true) {
+                                if (mList.none { a -> a == f.macaddress.uppercase() })
+                                    mList.add(f.macaddress.uppercase())
+                                //BluetoothActivity.scanningDeviceList.add(ScanningDeviceItem(f.macaddress.uppercase()))
+                            }
+                        }
+                    } else {
+                        mList.clear()
+                    }
+                } else
+                    mList.clear()
+            } else
+                mList.clear()
+            emit(mList)
+        }.distinctUntilChanged()
 
 
     fun getDbDeviceList() {
@@ -226,7 +268,6 @@ class userViewModel @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-
         }
     }
 
@@ -285,6 +326,7 @@ class userViewModel @Inject constructor(
                     IApiService.getInstance()
                 val apiSrv = IApiService.apiService
 
+
                 val dEviceRequest = DeviceAddUpdateRequest(
                     date = helper.getNowAsJsonString(),
                     description = null,
@@ -307,7 +349,6 @@ class userViewModel @Inject constructor(
                     ) {
                         //Log.v("MainActivity","remote Response : ${response.raw().code}")
                         if (response.isSuccessful) {
-
                             if (response.body()?.eventresultflag == EventResultFlags.SUCCESS.flag) {
 
                                 funResult = FormActionResult<Boolean>(true)
@@ -330,7 +371,6 @@ class userViewModel @Inject constructor(
                                 funResult?.error?.exception = eMessage
                                 trySend(funResult)
                             }
-
                         }
                     }
 
@@ -406,6 +446,22 @@ class userViewModel @Inject constructor(
         }
     }
 
+    fun getDeviceScanResult(macaddress: String): Flow<String> {
+        return callbackFlow {
+            trySend("Scanning...")
+            MainActivity.bleScanner.getScanResults().collect {
+                if (it != null) {
+                    if (it.isNotEmpty()) {
+                        if (it.any { a -> a.device.address == macaddress.uppercase() }) {
+                            val device =
+                                it.first { a -> a.device.address == macaddress.uppercase() }
+                            trySend(helper.CalculateRSSIToMeter(device.rssi).toString() + "mt")
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 enum class RMEventStatus { Initial, Running, Complete, Exception }

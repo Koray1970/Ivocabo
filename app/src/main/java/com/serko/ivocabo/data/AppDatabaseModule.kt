@@ -19,7 +19,4 @@ class AppDatabaseModule {
         Room.databaseBuilder(context,AppDatabase::class.java,"ivocabodb.db").allowMainThreadQueries().fallbackToDestructiveMigration().build()
     @Provides
     fun provideUserDao(appDatabase: AppDatabase)=appDatabase.userDao()
-
-
-
 }

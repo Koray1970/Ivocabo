@@ -10,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.serko.ivocabo.data.Screen
+import com.serko.ivocabo.pages.*
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
