@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ProgressIndicatorDefaults
@@ -21,7 +21,9 @@ import androidx.compose.ui.window.DialogProperties
 @Composable
 fun ComposeProgress(dialogshow: MutableState<Boolean>) {
     if (dialogshow.value) {
-        AlertDialog(onDismissRequest = { dialogshow.value = false }, properties = DialogProperties(
+        BasicAlertDialog(
+            onDismissRequest = { dialogshow.value = false },
+            properties = DialogProperties(
             usePlatformDefaultWidth = false
         ), content = {
             Surface(modifier = Modifier.fillMaxSize(), color = Color.Black.copy(alpha = .7f)) {

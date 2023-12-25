@@ -24,7 +24,6 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,10 +41,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.serko.ivocabo.BluetoothPermission
 import com.serko.ivocabo.R
-import com.serko.ivocabo.data.userViewModel
-import com.serko.ivocabo.pages.dummyDevice
-import com.serko.ivocabo.pages.metricDistance
-import com.serko.ivocabo.pages.metricDistanceTextStyle
+import com.serko.ivocabo.data.UserViewModel
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -56,12 +52,11 @@ import java.util.Locale
 fun FindMyDevice(
     macaddress: String?,
     navController: NavController,
-    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
-    userviewModel: userViewModel = hiltViewModel(),
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false)
 ) {
     composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
-
+    val userviewModel = hiltViewModel<UserViewModel>()
     val bluetoothPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
         BluetoothPermission(context)
 
@@ -73,7 +68,6 @@ fun FindMyDevice(
         }
     } else {
         composeProgressStatus.value = true
-        val scope = rememberCoroutineScope()
 
         var deviceDetail by remember { mutableStateOf(dummyDevice) }
         var deviceIcon = R.drawable.t3_icon_32
@@ -82,11 +76,7 @@ fun FindMyDevice(
         deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
         if (deviceDetail.devicetype != null) if (deviceDetail.devicetype == 2) deviceIcon =
             R.drawable.e9_icon_32
-        val _macaddress = macaddress.uppercase(Locale.ROOT)
-
-        ComposeScanResultUI(
-            context, _macaddress, composeProgressStatus
-        )
+        val mMacaddress = macaddress.uppercase(Locale.ROOT)
 
         Scaffold(
             floatingActionButton = {
@@ -141,7 +131,7 @@ fun FindMyDevice(
                     )
 
                     Text(
-                        text = _macaddress,
+                        text = mMacaddress,
                         style = TextStyle(fontWeight = FontWeight.Normal, fontSize = 18.sp)
                     )
                 }

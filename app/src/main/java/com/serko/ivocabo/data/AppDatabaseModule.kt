@@ -2,8 +2,6 @@ package com.serko.ivocabo.data
 
 import android.content.Context
 import androidx.room.Room
-import com.serko.ivocabo.bluetooth.BluetoothScanService
-
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

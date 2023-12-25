@@ -79,16 +79,17 @@ import androidx.navigation.compose.rememberNavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.google.android.gms.maps.model.LatLng
+import com.google.gson.Gson
 import com.serko.ivocabo.BluetoothPermission
 import com.serko.ivocabo.DeviceFormHelper
 import com.serko.ivocabo.FormDeviceItem
+import com.serko.ivocabo.Helper
 import com.serko.ivocabo.LocationPermission
 import com.serko.ivocabo.NotificationPermission
 import com.serko.ivocabo.R
-import com.serko.ivocabo.data.Device
 import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
-import com.serko.ivocabo.data.userViewModel
+import com.serko.ivocabo.data.UserViewModel
 import com.serko.ivocabo.location.AppFusedLocationRepo
 import com.utsman.osmandcompose.DefaultMapProperties
 import com.utsman.osmandcompose.Marker
@@ -111,15 +112,13 @@ import java.util.Locale
 @Composable
 fun Dashboard(
     navController: NavController = rememberNavController(),
-    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
-
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false)
     ) {
-    val userviewModel = hiltViewModel<userViewModel>()
     composeProgressStatus.value = true
+    val gson= Gson()
+    val helper= Helper()
     val context = LocalContext.current.applicationContext
-
-    /*var user = userviewModel.fetchUser()
-    var tokenData: Data? = null*/
+    val userviewModel = hiltViewModel<UserViewModel>()
 
 
     val locationPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
@@ -193,7 +192,7 @@ fun Dashboard(
 
                 val deviceFormHelper = DeviceFormHelper()
                 val deviceIconlist: MutableList<FormDeviceItem>
-                deviceIconlist = deviceFormHelper.FormDeviceList(context)
+                deviceIconlist = deviceFormHelper.FormDeviceList()
 
                 val (selectedOption, onOptionSelected) = remember { mutableStateOf(deviceIconlist[0]) }
 
@@ -204,7 +203,7 @@ fun Dashboard(
                 //var devicelist = remember { mutableListOf<Device>() }
                 val devicelistFlowState =
                     userviewModel.getDeviceFlowList()
-                        .collectAsStateWithLifecycle(initialValue = mutableListOf<Device>())
+                        .collectAsStateWithLifecycle(initialValue = mutableListOf())
 
                 composeProgressStatus.value = false
                 //end::Device Form assets
@@ -275,7 +274,7 @@ fun Dashboard(
                                 .background(Color.Black)
                         ) {
                             itemsIndexed(devicelistFlowState.value) { _, dd ->
-                                var deviceDismissShow by remember { mutableStateOf(true) }
+                                val deviceDismissShow by remember { mutableStateOf(true) }
                                 val deviceDismissState = rememberSwipeToDismissState()
                                 /* rememberDismissState(confirmValueChange = { dismissValue ->
                                      when (dismissValue) {
@@ -477,7 +476,7 @@ fun Dashboard(
                                             .collect { result ->
                                                 when (result) {
                                                     null -> {
-                                                        DoNothing()
+                                                        doNothing()
                                                     }
 
                                                     else -> {

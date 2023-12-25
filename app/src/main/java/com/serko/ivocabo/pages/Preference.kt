@@ -33,17 +33,18 @@ import androidx.navigation.NavController
 import com.serko.ivocabo.ComposeTitle
 import com.serko.ivocabo.R
 import com.serko.ivocabo.data.Screen
-import com.serko.ivocabo.data.userViewModel
+import com.serko.ivocabo.data.UserViewModel
 import com.serko.ivocabo.preferanceSupportingText
 import com.serko.ivocabo.profileFormLabel
 
 @Composable
 fun Preference(
     navController: NavController,
-    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
-    userviewModel: userViewModel = hiltViewModel()
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false)
 ) {
     val context = LocalContext.current.applicationContext
+    val userviewModel = hiltViewModel<UserViewModel>()
+
     val userDetail = userviewModel.fetchUser()
 
     var locationPermissionIcon by remember { mutableStateOf(R.drawable.baseline_indeterminate_check_box_24) }

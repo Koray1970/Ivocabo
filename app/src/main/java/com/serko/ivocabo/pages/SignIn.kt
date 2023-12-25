@@ -41,13 +41,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
+import com.google.gson.Gson
+import com.serko.ivocabo.Helper
 import com.serko.ivocabo.LocationPermission
 import com.serko.ivocabo.R
 import com.serko.ivocabo.SignUpFormHelper
 import com.serko.ivocabo.api.IApiService
 import com.serko.ivocabo.data.Screen
 import com.serko.ivocabo.data.User
-import com.serko.ivocabo.data.userViewModel
+import com.serko.ivocabo.data.UserViewModel
 import com.serko.ivocabo.remote.membership.SignInRequest
 import com.serko.ivocabo.remote.membership.SignInResponse
 import kotlinx.coroutines.delay
@@ -61,10 +63,12 @@ import retrofit2.Response
 @Composable
 fun SignIn(
     navController: NavController,
-    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
-    userviewModel: userViewModel = hiltViewModel(),
+    composeProgressStatus: MutableState<Boolean> = mutableStateOf(false)
 ) {
     val context = LocalContext.current.applicationContext
+    val userviewModel = hiltViewModel<UserViewModel>()
+    val gson = Gson()
+    val helper = Helper()
     val locationPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
         LocationPermission(context)
 
@@ -170,7 +174,7 @@ fun SignIn(
                     trailingIcon = {
                         var iconResource = R.drawable.baseline_visibility_off_24
                         if (passwordVisible) iconResource = R.drawable.baseline_visibility_24
-                        Row() {
+                        Row {
                             IconButton(onClick = { passwordVal = "" }) {
                                 Icon(
                                     painter = painterResource(R.drawable.baseline_clear_24),

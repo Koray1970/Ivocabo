@@ -1,23 +1,18 @@
 package com.serko.ivocabo.data
 
-import android.bluetooth.le.ScanFilter
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.serko.ivocabo.pages.helper
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.flow.collect
+import com.serko.ivocabo.Helper
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 class BleScanViewModel @Inject constructor(
-    private val userViewModel: userViewModel,
-    @ApplicationContext context: Context
+    private val userViewModel: UserViewModel
 ) :
     ViewModel() {
-
+    private val helper = Helper()
     private var _scanResultItems = mutableListOf<ScanResultItem>()
     val scanResultItems =
         flowOf(_scanResultItems).distinctUntilChanged()

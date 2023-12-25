@@ -6,9 +6,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Looper
-import android.util.Log
 import androidx.compose.runtime.mutableStateOf
-import androidx.lifecycle.MutableLiveData
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -19,27 +17,22 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 
 interface IAppFusedLocation {
-    fun startCurrentLocation(): Flow<LatLng>
+    fun startCurrentLocation(): Flow<LatLng?>
 }
 
 class AppFusedLocationRepo @Inject constructor(@ApplicationContext private val context: Context) :
     IAppFusedLocation {
 
-    var stopLocationJob = MutableStateFlow<Boolean>(false)
+    var stopLocationJob = MutableStateFlow(false)
 
     val gson = Gson()
 
@@ -49,17 +42,16 @@ class AppFusedLocationRepo @Inject constructor(@ApplicationContext private val c
 
 
     @SuppressLint("MissingPermission")
-    override fun startCurrentLocation(): Flow<LatLng> = callbackFlow {
+    override fun startCurrentLocation(): Flow<LatLng?> = callbackFlow {
+        trySend(null)
         val locationRequest = LocationRequest
             .Builder(10000)
             .setIntervalMillis(10000)
             .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
             .build()
-
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(p0: LocationResult) {
                 super.onLocationResult(p0)
-                p0 ?: return
                 trySend(
                     LatLng(
                         p0.lastLocation!!.latitude,
@@ -79,7 +71,7 @@ class AppFusedLocationRepo @Inject constructor(@ApplicationContext private val c
         }
         stopLocationJob.collect {
             if (it)
-                fusedLocationClient?.removeLocationUpdates(locationCallback)
+                fusedLocationClient.removeLocationUpdates(locationCallback)
         }
     }.flowOn(Dispatchers.Default)
 }

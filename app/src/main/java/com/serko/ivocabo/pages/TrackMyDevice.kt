@@ -21,7 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,15 +42,9 @@ import com.google.accompanist.permissions.MultiplePermissionsState
 import com.serko.ivocabo.BluetoothPermission
 import com.serko.ivocabo.NotificationPermission
 import com.serko.ivocabo.R
-import com.serko.ivocabo.bluetooth.BleScanner
-import com.serko.ivocabo.pages.bluetoothScanService
-import com.serko.ivocabo.data.userViewModel
-import com.serko.ivocabo.pages.dummyDevice
-import com.serko.ivocabo.pages.metricDistance
-import com.serko.ivocabo.pages.metricDistanceTextStyle
+import com.serko.ivocabo.data.UserViewModel
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -62,7 +55,7 @@ fun TrackMyDevice(
     navController: NavController,
     composeProgressStatus: MutableState<Boolean> = mutableStateOf(false)
 ) {
-    val userviewModel = hiltViewModel<userViewModel>()
+    val userviewModel = hiltViewModel<UserViewModel>()
     val context = LocalContext.current.applicationContext
 
     val bluetoothPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
@@ -93,16 +86,7 @@ fun TrackMyDevice(
                 R.drawable.e9_icon_32
             val _macaddress = macaddress.uppercase(Locale.ROOT)
 
-            LaunchedEffect(Unit) {
 
-                if (!BleScanner.scanFilters.isNullOrEmpty()) {
-
-                }
-                userviewModel.getDeviceScanResult(_macaddress).collect {
-                    metricDistance.value = it
-                    composeProgressStatus.value = false
-                }
-            }
 
             Scaffold(
                 floatingActionButton = {

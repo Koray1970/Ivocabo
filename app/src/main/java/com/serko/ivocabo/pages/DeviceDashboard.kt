@@ -1,10 +1,7 @@
 package com.serko.ivocabo.pages
 
-import android.bluetooth.le.ScanFilter
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,23 +54,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import androidx.work.Data
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.serko.ivocabo.BluetoothPermission
-import com.serko.ivocabo.MainActivity
 import com.serko.ivocabo.NotificationPermission
 import com.serko.ivocabo.R
-import com.serko.ivocabo.TrackWorker
-import com.serko.ivocabo.bluetooth.BleScanner
-import com.serko.ivocabo.bluetooth.BleScannerScanState
-import com.serko.ivocabo.bluetooth.BluetoothActivity
-import com.serko.ivocabo.bluetooth.ScanningDeviceItem
-import com.serko.ivocabo.data.Device
 import com.serko.ivocabo.data.Screen
-import com.serko.ivocabo.data.userViewModel
+import com.serko.ivocabo.data.UserViewModel
 import com.serko.ivocabo.location.AppFusedLocationRepo
 import com.utsman.osmandcompose.DefaultMapProperties
 import com.utsman.osmandcompose.Marker
@@ -98,11 +85,12 @@ fun DeviceDashboard(
     macaddress: String?,
     navController: NavController,
     composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
-    userviewModel: userViewModel = hiltViewModel(),
+
     //locationViewModel: LocationViewModel = hiltViewModel()
 ) {
     composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
+    val userviewModel = hiltViewModel<UserViewModel>()
     val bluetoothPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
         BluetoothPermission(context)
 
@@ -123,7 +111,7 @@ fun DeviceDashboard(
             composeProgressStatus.value = false
         } else {
             val scope = rememberCoroutineScope()
-            var deviceDetail by remember { mutableStateOf<Device>(dummyDevice) }
+            var deviceDetail by remember { mutableStateOf(dummyDevice) }
             var chkNotificationCheckState by remember { mutableStateOf(false) }
             if (deviceDetail.istracking != null) chkNotificationCheckState =
                 deviceDetail.istracking == true
@@ -157,20 +145,6 @@ fun DeviceDashboard(
                 }
             }
             //end:Map Properties
-
-            val workManager = WorkManager.getInstance(context)
-
-            /*var trackWorkRequest = OneTimeWorkRequestBuilder<TrackWorker>().setInputData(
-                Data.Builder().putString("macaddress", macaddress!!.uppercase(Locale.ROOT))
-                    .build()
-            ).build()
-            if (deviceDetail.istracking != null)
-                if (deviceDetail.istracking == true)
-                    workManager.enqueue(trackWorkRequest)
-                else
-                    workManager.cancelWorkById(trackWorkRequest.id)*/
-
-
 
             Scaffold(bottomBar = {
                 BottomAppBar(
@@ -208,8 +182,8 @@ fun DeviceDashboard(
                             })
                     },
                 )
-            }) { it ->
-                Column(modifier = Modifier.padding(it)) {
+            }) { paddingValues ->
+                Column(modifier = Modifier.padding(paddingValues)) {
                     OpenStreetMap(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -328,9 +302,7 @@ fun DeviceDashboard(
                                     ) {
                                         Switch(checked = chkNotificationCheckState,
                                             onCheckedChange = { cc ->
-                                                val mmc = macaddress!!.uppercase(Locale.ROOT)
-
-
+                                                //val mmc = macaddress!!.uppercase(Locale.ROOT)
                                                 //track switch onchecked
                                                 MainScope().launch {
                                                     val getloc =
@@ -340,44 +312,22 @@ fun DeviceDashboard(
                                                     if (!cc) {
                                                         //workManager.cancelWorkById(trackWorkRequest.id)
                                                         deviceDetail.istracking = null
-                                                        userviewModel.getScanDeviceList().first()
-                                                            .remove(deviceDetail.macaddress.uppercase())
-                                                        if(BleScanner.scanFilters!=null) {
-                                                            BleScanner.scanFilters?.removeIf { a -> a.deviceAddress == deviceDetail.macaddress.uppercase() }
-                                                            if (BleScanner.scanFilters?.size == 0) {
-                                                                BleScanner.SCAN_STATE.value =
-                                                                    BleScannerScanState.STOP_SCAN
-                                                                BleScanner.scanFilters = null
-                                                            }
-                                                        }
-
                                                     } else {
                                                         //workManager.enqueue(trackWorkRequest)
-                                                        userviewModel.getScanDeviceList().first()
-                                                            .add(deviceDetail.macaddress.uppercase())
-                                                        if(BleScanner.scanFilters.isNullOrEmpty())
-                                                            BleScanner.scanFilters= mutableListOf<ScanFilter>()
-                                                        BleScanner.scanFilters?.add(
-                                                            ScanFilter.Builder()
-                                                                .setDeviceAddress(deviceDetail.macaddress.uppercase())
-                                                                .build()
-                                                        )
-                                                        if (BleScanner.SCAN_STATE.value == BleScannerScanState.STOP_SCAN) BleScanner.SCAN_STATE.value =
-                                                            BleScannerScanState.START_SCAN
                                                         deviceDetail.istracking = true
                                                         deviceDetail.ismissing = null
                                                     }
 
                                                     deviceDetail.longitude =
-                                                        getloc.longitude.toString()
+                                                        getloc?.longitude.toString()
                                                     deviceDetail.latitude =
-                                                        getloc.latitude.toString()
+                                                        getloc?.latitude.toString()
                                                     userviewModel.addUpdateDevice(deviceDetail)
                                                         .flowOn(Dispatchers.Default).cancellable()
                                                         .collect { result ->
                                                             when (result) {
                                                                 null -> {
-                                                                    DoNothing()
+                                                                    doNothing()
                                                                 }
 
                                                                 else -> {
@@ -398,10 +348,7 @@ fun DeviceDashboard(
                                                                                 Toast.LENGTH_LONG
                                                                             ).show()
                                                                         }
-                                                                        MainActivity.bleScanner.getScanResults()
-                                                                            .collect { h ->
-                                                                                //Log.v("MainActivity", gson.toJson(h))
-                                                                            }
+
                                                                     } else {
                                                                         if (result.error != null) {
                                                                             Toast.makeText(
@@ -468,14 +415,14 @@ fun DeviceDashboard(
                                                     deviceDetail.istracking = null
                                                     deviceDetail.ismissing = true
                                                 }
-                                                deviceDetail.longitude = getloc.longitude.toString()
-                                                deviceDetail.latitude = getloc.latitude.toString()
+                                                deviceDetail.longitude = getloc?.longitude.toString()
+                                                deviceDetail.latitude = getloc?.latitude.toString()
                                                 userviewModel.addUpdateDevice(deviceDetail)
                                                     .flowOn(Dispatchers.Default).cancellable()
                                                     .collect { result ->
                                                         when (result) {
                                                             null -> {
-                                                                DoNothing()
+                                                                doNothing()
                                                             }
 
                                                             else -> {
