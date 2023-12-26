@@ -13,6 +13,9 @@ class BleScanViewModel @Inject constructor(
 ) :
     ViewModel() {
     private val helper = Helper()
+    private var _scanDevices = mutableListOf<String>()
+    val scanDevices = flowOf(_scanDevices).distinctUntilChanged()
+
     private var _scanResultItems = mutableListOf<ScanResultItem>()
     val scanResultItems =
         flowOf(_scanResultItems).distinctUntilChanged()
@@ -22,7 +25,7 @@ class BleScanViewModel @Inject constructor(
             userViewModel.getScanDeviceList().collect {
                 if (it.isNotEmpty()) {
                     it.forEach { r ->
-                        _scanResultItems.add(ScanResultItem(macaddress = r))
+                        _scanDevices.add(r)
                     }
                 }
             }

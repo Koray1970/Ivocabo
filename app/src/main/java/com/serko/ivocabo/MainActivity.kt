@@ -20,7 +20,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.serko.ivocabo.bluetooth.BleScanner
+import com.serko.ivocabo.bluetooth.BluetoothScanStates
 import com.serko.ivocabo.bluetooth.BluetoothStatusObserver
 import com.serko.ivocabo.bluetooth.IBluetoothStatusObserver
 import com.serko.ivocabo.data.BleScanViewModel
@@ -38,8 +41,9 @@ import kotlinx.coroutines.flow.onEach
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    val userViewModel:UserViewModel by viewModels()
+    val userViewModel: UserViewModel by viewModels()
     val bleScanViewModel: BleScanViewModel by viewModels()
+
 
     companion object {
 
@@ -83,13 +87,30 @@ class MainActivity : ComponentActivity() {
             }
             println("BluetoothStatus : ${it.name}")
         }.launchIn(lifecycleScope)
+
+        val bleScanner = BleScanner(applicationContext)
+        BleScanner.scanDeviceMacaddres.add("C3:00:00:05:0A:22")
+        BleScanner.scanStatus.value = BluetoothScanStates.START_SCANNING
+
+
         setContent {
             IvocaboTheme(
                 darkTheme = false, dynamicColor = false
             ) {
                 // A surface container using the 'background' color from the theme
                 val composeProgressDialogStatus = remember { mutableStateOf(false) }
-
+                val listofScanDevices =
+                    bleScanViewModel.scanDevices.collectAsStateWithLifecycle(initialValue = mutableListOf())
+                when (listofScanDevices.value.isNotEmpty()) {
+                    true->{
+                        listofScanDevices.value.forEach { a->
+                           if(BleScanner.scanDeviceMacaddres.none { f->f==a.uppercase() })
+                               BleScanner.scanDeviceMacaddres.add(a)
+                        }
+                    }
+                    false->{ BleScanner.scanDeviceMacaddres = mutableListOf()
+                    }
+                }
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
