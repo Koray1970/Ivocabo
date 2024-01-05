@@ -56,6 +56,6 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.Ivocabo"
             tools:ignore="LockedOrientationActivity" />
+        <receiver android:name=".notification.NotificationReceiver" android:exported="false" />
     </application>
-
 </manifest>

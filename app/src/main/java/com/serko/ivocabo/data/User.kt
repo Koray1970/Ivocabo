@@ -3,6 +3,8 @@ package com.serko.ivocabo.data
 import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.util.Log
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.toMutableStateList
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -127,9 +129,9 @@ class UserRepository @Inject constructor(private val userDao: UserDao) {
 
 @HiltViewModel
 class UserViewModel @Inject constructor(
-    @ApplicationContext val applicationContext:Context,
+    @ApplicationContext val applicationContext: Context,
     private val repo: UserRepository
-    ) : ViewModel() {
+) : ViewModel() {
     private val helper = Helper()
     private val gson = Gson()
     var user: User?
@@ -252,7 +254,7 @@ class UserViewModel @Inject constructor(
         }
     }
 
-    fun getDeviceDetail(macaddress: String): Device? {
+    fun getDeviceDetail(macaddress: String) = flow<Device> {
         try {
             val dDevicecol = repo.getDevices()
             if (dDevicecol != null) {
@@ -261,9 +263,24 @@ class UserViewModel @Inject constructor(
                         dDevicecol,
                         object : TypeToken<List<Device>>() {}.type
                     )
-                    if (listOfDevice.any { a -> a.macaddress == macaddress }) {
-                        return listOfDevice.first { a -> a.macaddress == macaddress }
-                    }
+                    emit(listOfDevice.first { a -> a.macaddress.uppercase() == macaddress.uppercase() })
+                }
+            }
+        } catch (_: Exception) {
+
+        }
+    }
+
+    fun getDeviceDetail2(macaddress: String): Device? {
+        try {
+            val dDevicecol = repo.getDevices()
+            if (dDevicecol != null) {
+                if (dDevicecol.isNotEmpty()) {
+                    val listOfDevice = gson.fromJson<List<Device>>(
+                        dDevicecol,
+                        object : TypeToken<List<Device>>() {}.type
+                    )
+                    return listOfDevice.first { a -> a.macaddress.uppercase() == macaddress.uppercase() }
                 }
             }
         } catch (_: Exception) {

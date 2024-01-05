@@ -65,7 +65,7 @@ fun AppNavigation(composeProgressDialogStatus:MutableState<Boolean>){
             })
         ) {
             TrackMyDevice(
-                macaddress = it.arguments?.getString("macaddress"),
+                macaddress = it.arguments?.getString("macaddress")!!,
                 navController,
                 composeProgressDialogStatus
             )

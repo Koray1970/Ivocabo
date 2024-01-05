@@ -34,7 +34,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,12 +52,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
+import com.google.android.gms.maps.model.LatLng
 import com.serko.ivocabo.BluetoothPermission
+import com.serko.ivocabo.MainActivity
 import com.serko.ivocabo.NotificationPermission
 import com.serko.ivocabo.R
+import com.serko.ivocabo.bluetooth.BleScanner
+import com.serko.ivocabo.bluetooth.BluetoothScanStates
 import com.serko.ivocabo.data.Screen
 import com.serko.ivocabo.data.UserViewModel
 import com.serko.ivocabo.location.AppFusedLocationRepo
@@ -111,38 +115,50 @@ fun DeviceDashboard(
             composeProgressStatus.value = false
         } else {
             val scope = rememberCoroutineScope()
-            var deviceDetail by remember { mutableStateOf(dummyDevice) }
+            //var deviceDetail by remember { mutableStateOf(dummyDevice) }
             var chkNotificationCheckState by remember { mutableStateOf(false) }
-            if (deviceDetail.istracking != null) chkNotificationCheckState =
-                deviceDetail.istracking == true
+
             var chkMissingCheckState by remember { mutableStateOf(false) }
-            if (deviceDetail.ismissing != null) chkMissingCheckState =
-                deviceDetail.ismissing == true
-            val mapMarkerState = rememberMarkerState(geoPoint = GeoPoint(0.0, 0.0))
+            var geopoint = GeoPoint(0.0, 0.0)
+            val mapMarkerState = rememberMarkerState(geoPoint = geopoint)
             var mapProperties by remember { mutableStateOf(DefaultMapProperties) }
             val cameraState = rememberCameraState {
-                geoPoint = GeoPoint(0.0, 0.0)
+                geoPoint = geopoint
                 zoom = 19.0 // optional, default is 5.0
             }
+            val appFusedLocationRepo = AppFusedLocationRepo(context)
+            val getLocation = appFusedLocationRepo.startCurrentLocation()
+                .collectAsStateWithLifecycle(initialValue = LatLng(0.0, 0.0))
+            val deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
+                .collectAsStateWithLifecycle(initialValue = dummyDevice)
+            scope.launch {
+                delay(1000)
+                if (deviceDetail.value.istracking != null) chkNotificationCheckState =
+                    deviceDetail.value.istracking == true
+                if (deviceDetail.value.ismissing != null) chkMissingCheckState =
+                    deviceDetail.value.ismissing == true
+                while (true) {
+                    if (deviceDetail.value.latitude == "null")
+                        deviceDetail.value.latitude = getLocation.value.latitude.toString()
+                    if (deviceDetail.value.longitude == "null")
+                        deviceDetail.value.longitude = getLocation.value.longitude.toString()
+                    geopoint = GeoPoint(
+                        deviceDetail.value.latitude!!.toDouble(),
+                        deviceDetail.value.longitude!!.toDouble()
+                    )
+                    cameraState.geoPoint = geopoint
+                    mapMarkerState.geoPoint = geopoint
 
-            SideEffect {
-                deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
-
-                //start:Map Properties
-                val geopoint = GeoPoint(
-                    deviceDetail.latitude!!.toDouble(), deviceDetail.longitude!!.toDouble()
-                )
-                cameraState.geoPoint = geopoint
-                mapMarkerState.geoPoint = geopoint
-
-                mapProperties = mapProperties.copy(isTilesScaledToDpi = true)
-                    .copy(tileSources = TileSourceFactory.MAPNIK)
-                    .copy(isEnableRotationGesture = false)
-                    .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
-                scope.launch {
-                    delay(320)
-                    composeProgressStatus.value = false
+                    mapProperties = mapProperties.copy(isTilesScaledToDpi = true)
+                        .copy(tileSources = TileSourceFactory.MAPNIK)
+                        .copy(isEnableRotationGesture = false)
+                        .copy(zoomButtonVisibility = ZoomButtonVisibility.NEVER)
+                    if (getLocation.value.latitude > 0) {
+                        break
+                    }
+                    delay(1000)
                 }
+                composeProgressStatus.value = false
             }
             //end:Map Properties
 
@@ -203,12 +219,12 @@ fun DeviceDashboard(
                                 .padding(20.dp)
                         ) {
                             Text(
-                                text = deviceDetail.name,
+                                text = deviceDetail.value.name,
                                 style = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold),
                                 color = Color.White
                             )
                             Text(
-                                text = "${deviceDetail.macaddress.uppercase(Locale.ROOT)} ${deviceDetail.registerdate}",
+                                text = "${deviceDetail.value.macaddress.uppercase(Locale.ROOT)} ${deviceDetail.value.registerdate}",
                                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Light),
                                 color = Color.White
                             )
@@ -230,7 +246,7 @@ fun DeviceDashboard(
                                         disabledContentColor = Color.DarkGray
                                     ),
                                     onClick = {
-                                        navController.navigate("trackmydevice/${deviceDetail.macaddress}")
+                                        navController.navigate("trackmydevice/${deviceDetail.value.macaddress}")
                                     }) {
                                     Icon(
                                         painter = painterResource(id = R.drawable.baseline_track_changes_24),
@@ -241,7 +257,7 @@ fun DeviceDashboard(
                                     Spacer(modifier = Modifier.width(4.dp))
                                     val txttrack = String.format(
                                         context.getString(R.string.tracking),
-                                        "\n${deviceDetail.name}"
+                                        "\n${deviceDetail.value.name}"
                                     )
                                     Text(text = txttrack, color = Color.White)
                                 }
@@ -258,7 +274,7 @@ fun DeviceDashboard(
                                         disabledContentColor = Color.DarkGray
                                     ),
                                     onClick = {
-                                        navController.navigate("findmydevice/${deviceDetail.macaddress}")
+                                        navController.navigate("findmydevice/${deviceDetail.value.macaddress}")
                                     }) {
                                     Icon(
                                         painter = painterResource(id = R.drawable.baseline_wifi_find_24),
@@ -271,7 +287,7 @@ fun DeviceDashboard(
                                     Spacer(modifier = Modifier.width(4.dp))
                                     val txtfindmydevice = String.format(
                                         context.getString(R.string.findmydevice),
-                                        "\n${deviceDetail.name}"
+                                        "\n${deviceDetail.value.name}"
                                     )
                                     Text(text = txtfindmydevice, color = Color.White)
                                 }
@@ -311,18 +327,20 @@ fun DeviceDashboard(
                                                     delay(100)
                                                     if (!cc) {
                                                         //workManager.cancelWorkById(trackWorkRequest.id)
-                                                        deviceDetail.istracking = null
+                                                        deviceDetail.value.istracking = null
                                                     } else {
                                                         //workManager.enqueue(trackWorkRequest)
-                                                        deviceDetail.istracking = true
-                                                        deviceDetail.ismissing = null
+                                                        deviceDetail.value.istracking = true
+                                                        deviceDetail.value.ismissing = null
                                                     }
 
-                                                    deviceDetail.longitude =
+                                                    //MainActivity.bleScanner.StopScanning()
+
+                                                    deviceDetail.value.longitude =
                                                         getloc?.longitude.toString()
-                                                    deviceDetail.latitude =
+                                                    deviceDetail.value.latitude =
                                                         getloc?.latitude.toString()
-                                                    userviewModel.addUpdateDevice(deviceDetail)
+                                                    userviewModel.addUpdateDevice(deviceDetail.value)
                                                         .flowOn(Dispatchers.Default).cancellable()
                                                         .collect { result ->
                                                             when (result) {
@@ -410,14 +428,16 @@ fun DeviceDashboard(
                                                     AppFusedLocationRepo(context).startCurrentLocation()
                                                         .cancellable().first()
                                                 delay(100)
-                                                if (!it) deviceDetail.ismissing = null
+                                                if (!it) deviceDetail.value.ismissing = null
                                                 else {
-                                                    deviceDetail.istracking = null
-                                                    deviceDetail.ismissing = true
+                                                    deviceDetail.value.istracking = null
+                                                    deviceDetail.value.ismissing = true
                                                 }
-                                                deviceDetail.longitude = getloc?.longitude.toString()
-                                                deviceDetail.latitude = getloc?.latitude.toString()
-                                                userviewModel.addUpdateDevice(deviceDetail)
+                                                deviceDetail.value.longitude =
+                                                    getloc?.longitude.toString()
+                                                deviceDetail.value.latitude =
+                                                    getloc?.latitude.toString()
+                                                userviewModel.addUpdateDevice(deviceDetail.value)
                                                     .flowOn(Dispatchers.Default).cancellable()
                                                     .collect { result ->
                                                         when (result) {

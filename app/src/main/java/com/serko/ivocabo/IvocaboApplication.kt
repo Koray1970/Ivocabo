@@ -36,19 +36,19 @@ class IvocaboApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-           /* val soundUri =
+           val soundUri =
                 Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + applicationContext.packageName + "/" + R.raw.alarm)
             val audioAttributes = AudioAttributes.Builder()
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                .build()*/
+                .build()
 
             val channel = NotificationChannel(
                 "ivoNotification",
                 "ivocabo",
                 NotificationManager.IMPORTANCE_HIGH
             )
-            //channel.setSound(soundUri, audioAttributes)
+            channel.setSound(soundUri, audioAttributes)
             val notificationManager =
                 getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)

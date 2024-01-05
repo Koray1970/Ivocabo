@@ -18,6 +18,6 @@ val defaultMetricTextStyle = TextStyle(
 val scanningMetricTextStyle = TextStyle(
     fontWeight = FontWeight.Bold, fontSize = 24.sp, textAlign = TextAlign.Center, color = Color.Red
 )
-var metricDistance = mutableStateOf("")
+
 var metricDistanceTextStyle = mutableStateOf(defaultMetricTextStyle)
 fun doNothing() {}

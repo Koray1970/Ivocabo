@@ -9,6 +9,7 @@
     <string name="password">Password</string>
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
+    <string name="removefromscanlist">Remove From Scan List</string>
     <string name="ireadandunderstand">I read and understood</string>
     <string name="iunderstand">I am understanding.</string>
     <string name="ok">OK</string>

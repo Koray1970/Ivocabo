@@ -91,6 +91,7 @@ import com.serko.ivocabo.data.RMEventStatus
 import com.serko.ivocabo.data.Screen
 import com.serko.ivocabo.data.UserViewModel
 import com.serko.ivocabo.location.AppFusedLocationRepo
+import com.serko.ivocabo.location.AppFusedLocationState
 import com.utsman.osmandcompose.DefaultMapProperties
 import com.utsman.osmandcompose.Marker
 import com.utsman.osmandcompose.OpenStreetMap
@@ -113,10 +114,10 @@ import java.util.Locale
 fun Dashboard(
     navController: NavController = rememberNavController(),
     composeProgressStatus: MutableState<Boolean> = mutableStateOf(false)
-    ) {
+) {
     composeProgressStatus.value = true
-    val gson= Gson()
-    val helper= Helper()
+    val gson = Gson()
+    val helper = Helper()
     val context = LocalContext.current.applicationContext
     val userviewModel = hiltViewModel<UserViewModel>()
 
@@ -336,38 +337,56 @@ fun Dashboard(
                                         }) {
                                         Card(
                                             modifier = Modifier.clickable(onClick = {
-                                                networkLocation.stopLocationJob.tryEmit(true)
+                                                AppFusedLocationRepo.locationState.value =
+                                                    AppFusedLocationState.STOP_LOCATION
                                                 navController.navigate("devicedashboard/${dd.macaddress}")
                                             }),
                                             shape = RoundedCornerShape(0.dp),
                                         ) {
-                                            ListItem(leadingContent = {
-                                                var deviceIcon = R.drawable.t3_icon_32
-                                                if (dd.devicetype == 2) deviceIcon =
-                                                    R.drawable.e9_icon_32
-                                                Icon(
-                                                    painter = painterResource(id = deviceIcon),
-                                                    contentDescription = null,
-                                                    tint = Color.DarkGray
-                                                )
-                                            }, headlineContent = {
-                                                Text(
-                                                    text = dd.name.uppercase(Locale.ROOT),
-                                                    style = TextStyle(
-                                                        color = Color.DarkGray,
-                                                        fontWeight = FontWeight.ExtraBold,
-                                                        fontSize = 16.sp
+                                            ListItem(
+                                                leadingContent = {
+                                                    var deviceIcon = R.drawable.t3_icon_32
+                                                    if (dd.devicetype == 2) deviceIcon =
+                                                        R.drawable.e9_icon_32
+                                                    Icon(
+                                                        painter = painterResource(id = deviceIcon),
+                                                        contentDescription = null,
+                                                        tint = Color.DarkGray
                                                     )
-                                                )
-                                            }, supportingContent = {
-                                                Text(
-                                                    text = dd.macaddress.uppercase(Locale.ROOT),
-                                                    style = TextStyle(
-                                                        color = Color.Gray,
-                                                        fontWeight = FontWeight.SemiBold,
+                                                }, headlineContent = {
+                                                    Text(
+                                                        text = dd.name.uppercase(Locale.ROOT),
+                                                        style = TextStyle(
+                                                            color = Color.DarkGray,
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            fontSize = 16.sp
+                                                        )
                                                     )
-                                                )
-                                            })
+                                                }, supportingContent = {
+                                                    Text(
+                                                        text = dd.macaddress.uppercase(Locale.ROOT),
+                                                        style = TextStyle(
+                                                            color = Color.Gray,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                        )
+                                                    )
+                                                },
+                                                trailingContent = {
+                                                    if (dd.istracking != null && dd.istracking == true) {
+                                                        Icon(
+                                                            painter = painterResource(id = R.drawable.baseline_settings_input_antenna_24),
+                                                            contentDescription = null,
+                                                            tint = Color.Green
+                                                        )
+                                                    }
+                                                    if(dd.ismissing!=null && dd.ismissing==true){
+                                                        Icon(
+                                                            painter = painterResource(id = R.drawable.baseline_cell_tower_24),
+                                                            contentDescription = null,
+                                                            tint=Color.Red
+                                                        )
+                                                    }
+                                                })
                                             HorizontalDivider()
                                         }
                                     }

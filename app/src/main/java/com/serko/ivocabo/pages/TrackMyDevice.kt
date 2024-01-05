@@ -1,6 +1,7 @@
 package com.serko.ivocabo.pages
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -36,12 +37,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.serko.ivocabo.BluetoothPermission
+import com.serko.ivocabo.Helper
+import com.serko.ivocabo.MainActivity
 import com.serko.ivocabo.NotificationPermission
 import com.serko.ivocabo.R
+import com.serko.ivocabo.bluetooth.BleScanFilterItem
+import com.serko.ivocabo.bluetooth.BleScanner
+import com.serko.ivocabo.data.BleScanViewModel
 import com.serko.ivocabo.data.UserViewModel
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
@@ -51,11 +58,12 @@ import java.util.Locale
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun TrackMyDevice(
-    macaddress: String?,
+    macaddress: String,
     navController: NavController,
     composeProgressStatus: MutableState<Boolean> = mutableStateOf(false)
 ) {
     val userviewModel = hiltViewModel<UserViewModel>()
+
     val context = LocalContext.current.applicationContext
 
     val bluetoothPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
@@ -76,17 +84,36 @@ fun TrackMyDevice(
             }
         } else {
             composeProgressStatus.value = true
+            val bleScanViewModel = hiltViewModel<BleScanViewModel>()
+
+            val helper = Helper()
             //val scope = rememberCoroutineScope()
             var deviceDetail by remember { mutableStateOf(dummyDevice) }
+
+            val _deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress)
+                .collectAsStateWithLifecycle(initialValue = dummyDevice)
             var deviceIcon = R.drawable.t3_icon_32
 
-
-            deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
-            if (deviceDetail.devicetype != null) if (deviceDetail.devicetype == 2) deviceIcon =
-                R.drawable.e9_icon_32
             val _macaddress = macaddress.uppercase(Locale.ROOT)
 
 
+
+            val metricValue = remember { mutableStateOf("") }
+            val getScanResult =
+                bleScanViewModel.getCurrentDeviceResult(_macaddress)
+                    .collectAsStateWithLifecycle(initialValue = null)
+            LaunchedEffect(Unit) {
+                delay(100)
+                bleScanViewModel.addItemToBleScannerFilter(_deviceDetail.value, false)
+                deviceDetail = _deviceDetail.value
+                if (deviceDetail.devicetype != null) if (deviceDetail.devicetype == 2) deviceIcon =
+                    R.drawable.e9_icon_32
+                if (getScanResult.value != null) {
+                    if (getScanResult.value!!.rssi != null)
+                        metricValue.value =
+                            helper.CalculateRSSIToMeter(getScanResult.value!!.rssi) + "mt"
+                }
+            }
 
             Scaffold(
                 floatingActionButton = {
@@ -158,7 +185,7 @@ fun TrackMyDevice(
                             style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp)
                         )
                         Text(
-                            text = metricDistance.value,
+                            text = metricValue.value,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .border(1.dp, Color.DarkGray),
@@ -179,5 +206,6 @@ fun TrackMyDevice(
             }
         }
         BackHandler(true) {}
+        composeProgressStatus.value = false
     }
 }

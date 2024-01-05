@@ -18,10 +18,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.serko.ivocabo.bluetooth.BleScanFilterItem
 import com.serko.ivocabo.bluetooth.BleScanner
 import com.serko.ivocabo.bluetooth.BluetoothScanStates
 import com.serko.ivocabo.bluetooth.BluetoothStatusObserver
@@ -31,8 +33,10 @@ import com.serko.ivocabo.data.UserViewModel
 import com.serko.ivocabo.pages.ComposeProgress
 import com.serko.ivocabo.ui.theme.IvocaboTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 
 //koko
 //koko@gmail.com
@@ -46,7 +50,7 @@ class MainActivity : ComponentActivity() {
 
 
     companion object {
-
+        lateinit var bleScanner: BleScanner
     }
 
     override fun onLowMemory() {
@@ -64,12 +68,23 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
+    /*fun RemoveDeviceTracking(macaddress: String) {
+        val uVM: UserViewModel by viewModels()
+        MainScope().launch {
+            delay(300)
+            val device = uVM.getDeviceDetail2(macaddress)
+            if (device != null) {
+                device.istracking = null
+                uVM.addUpdateDevice(device)
+            }
+        }
+    }*/
+
     @SuppressLint("MissingPermission")
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         //applicationContext.deleteDatabase(applicationContext.getString(R.string.dbname))
-
         hideSystemUI()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
@@ -88,34 +103,78 @@ class MainActivity : ComponentActivity() {
             println("BluetoothStatus : ${it.name}")
         }.launchIn(lifecycleScope)
 
-        val bleScanner = BleScanner(applicationContext)
-        BleScanner.scanDeviceMacaddres.add("C3:00:00:05:0A:22")
-        BleScanner.scanStatus.value = BluetoothScanStates.START_SCANNING
-
+        bleScanner = BleScanner(applicationContext,userViewModel)
 
         setContent {
             IvocaboTheme(
                 darkTheme = false, dynamicColor = false
             ) {
                 // A surface container using the 'background' color from the theme
+                val scope = rememberCoroutineScope()
                 val composeProgressDialogStatus = remember { mutableStateOf(false) }
-                val listofScanDevices =
-                    bleScanViewModel.scanDevices.collectAsStateWithLifecycle(initialValue = mutableListOf())
-                when (listofScanDevices.value.isNotEmpty()) {
-                    true->{
-                        listofScanDevices.value.forEach { a->
-                           if(BleScanner.scanDeviceMacaddres.none { f->f==a.uppercase() })
-                               BleScanner.scanDeviceMacaddres.add(a)
+                val deviceScanListResult =
+                    bleScanViewModel.scanDevices().collectAsStateWithLifecycle(
+                        initialValue = emptyList()
+                    )
+                scope.launch {
+
+                    while (true) {
+                        when (deviceScanListResult.value.isEmpty()) {
+                            true -> {
+                                if (BleScanner.scanStatus.value == BluetoothScanStates.SCANNING) {
+                                    bleScanner.StopScanning()
+                                    BleScanner.scanStatus.value = BluetoothScanStates.INIT
+                                }
+                            }
+
+                            false -> {
+                                if (BleScanner.scanFilter.isNotEmpty())
+                                    BleScanner.scanFilter.removeIf { a -> deviceScanListResult.value.none { g -> g.uppercase() == a.macaddress.uppercase() } }
+                                deviceScanListResult.value.onEach { a ->
+                                    if (BleScanner.scanFilter.none { g -> g.macaddress.uppercase() == a.uppercase() }) {
+                                        val deviceDetail =
+                                            userViewModel.getDeviceDetail2(a.uppercase())
+                                        BleScanner.scanFilter.add(
+                                            BleScanFilterItem(
+                                                name = deviceDetail?.name ?: "",
+                                                macaddress = a.uppercase(),
+                                                stimulable = true
+                                            )
+                                        )
+                                    }
+                                }
+
+
+                                if (BleScanner.scanStatus.value == BluetoothScanStates.INIT) {
+                                    bleScanner.StartScanning()
+                                    BleScanner.scanStatus.value = BluetoothScanStates.SCANNING
+                                }
+                            }
                         }
+                        delay(1000L)
                     }
-                    false->{ BleScanner.scanDeviceMacaddres = mutableListOf()
-                    }
+
                 }
+
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    /* SideEffect {
+                         scope.launch {
+                             while (true) {
+                                 if (BleScanner.scanResults.isNotEmpty()) {
+                                     BleScanner.scanResults.onEach { a ->
+                                         if (a.disconnectedCounter >= 11) {
+                                             notifService.showNotification("", a.macaddress)
+                                         }
+                                     }
+                                 }
+                                 delay(2000)
+                             }
+                         }
+                     }*/
                     AppNavigation(composeProgressDialogStatus)
                     ComposeProgress(dialogshow = composeProgressDialogStatus)
                 }

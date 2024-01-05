@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,11 +37,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.serko.ivocabo.BluetoothPermission
+import com.serko.ivocabo.Helper
 import com.serko.ivocabo.R
+import com.serko.ivocabo.data.BleScanViewModel
 import com.serko.ivocabo.data.UserViewModel
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
@@ -68,15 +72,38 @@ fun FindMyDevice(
         }
     } else {
         composeProgressStatus.value = true
+        val mMacaddress = macaddress!!.uppercase(Locale.ROOT)
+        val bleScanViewModel = hiltViewModel<BleScanViewModel>()
 
+        val helper = Helper()
         var deviceDetail by remember { mutableStateOf(dummyDevice) }
         var deviceIcon = R.drawable.t3_icon_32
 
+        val _deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress)
+            .collectAsStateWithLifecycle(initialValue = dummyDevice)
 
-        deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)!!
-        if (deviceDetail.devicetype != null) if (deviceDetail.devicetype == 2) deviceIcon =
-            R.drawable.e9_icon_32
-        val mMacaddress = macaddress.uppercase(Locale.ROOT)
+
+
+        val metricValue = remember { mutableStateOf("") }
+        val getScanResult =
+            bleScanViewModel.getCurrentDeviceResult(mMacaddress)
+                .collectAsStateWithLifecycle(initialValue = null)
+
+        LaunchedEffect(Unit) {
+            delay(100)
+            bleScanViewModel.addItemToBleScannerFilter(_deviceDetail.value, false)
+            deviceDetail = _deviceDetail.value
+            if (deviceDetail.devicetype != null) if (deviceDetail.devicetype == 2) deviceIcon =
+                R.drawable.e9_icon_32
+            while (true) {
+                if (getScanResult.value != null) {
+                    if (getScanResult.value!!.rssi != null)
+                        metricValue.value =
+                            helper.CalculateRSSIToMeter(getScanResult.value!!.rssi) + "mt"
+                }
+                delay(2000L)
+            }
+        }
 
         Scaffold(
             floatingActionButton = {
@@ -146,7 +173,7 @@ fun FindMyDevice(
                         style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp)
                     )
                     Text(
-                        text = metricDistance.value,
+                        text = metricValue.value,
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(1.dp, Color.DarkGray),
@@ -166,6 +193,7 @@ fun FindMyDevice(
             }
         }
         BackHandler(true) {}
+        composeProgressStatus.value = false
     }
 
 }
