@@ -1,6 +1,7 @@
 package com.serko.ivocabo
 
 import android.app.Application
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ContentResolver
@@ -37,7 +38,7 @@ class IvocaboApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
            val soundUri =
-                Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + applicationContext.packageName + "/" + R.raw.alarm)
+                Uri.parse("${ContentResolver.SCHEME_ANDROID_RESOURCE}://${applicationContext.packageName}/raw/alarm")
             val audioAttributes = AudioAttributes.Builder()
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION)
@@ -48,7 +49,8 @@ class IvocaboApplication : Application(), Configuration.Provider {
                 "ivocabo",
                 NotificationManager.IMPORTANCE_HIGH
             )
-            channel.setSound(soundUri, audioAttributes)
+            channel.enableVibration(true)
+            channel.setSound(soundUri, Notification.AUDIO_ATTRIBUTES_DEFAULT)
             val notificationManager =
                 getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)

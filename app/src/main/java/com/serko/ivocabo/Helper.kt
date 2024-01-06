@@ -72,4 +72,8 @@ class Helper {
         }
         return null
     }
+
+    fun getRandomInt(): Int {
+        return (0..1000000).shuffled().last()
+    }
 }

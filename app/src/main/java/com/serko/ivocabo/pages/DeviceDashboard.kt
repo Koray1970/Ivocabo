@@ -337,9 +337,9 @@ fun DeviceDashboard(
                                                     //MainActivity.bleScanner.StopScanning()
 
                                                     deviceDetail.value.longitude =
-                                                        getloc?.longitude.toString()
+                                                        getloc.longitude.toString()
                                                     deviceDetail.value.latitude =
-                                                        getloc?.latitude.toString()
+                                                        getloc.latitude.toString()
                                                     userviewModel.addUpdateDevice(deviceDetail.value)
                                                         .flowOn(Dispatchers.Default).cancellable()
                                                         .collect { result ->
@@ -434,9 +434,9 @@ fun DeviceDashboard(
                                                     deviceDetail.value.ismissing = true
                                                 }
                                                 deviceDetail.value.longitude =
-                                                    getloc?.longitude.toString()
+                                                    getloc.longitude.toString()
                                                 deviceDetail.value.latitude =
-                                                    getloc?.latitude.toString()
+                                                    getloc.latitude.toString()
                                                 userviewModel.addUpdateDevice(deviceDetail.value)
                                                     .flowOn(Dispatchers.Default).cancellable()
                                                     .collect { result ->

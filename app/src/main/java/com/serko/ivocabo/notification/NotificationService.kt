@@ -18,15 +18,19 @@ class NotificationService @Inject constructor(@ApplicationContext private val ap
     private val notificationManager =
         applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val contentText = applicationContext.getString(R.string.ntf_summary)
-    private val soundUri =
-        Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + applicationContext.packageName + "/" + R.raw.alarm)
 
-    fun showNotification(devicename: String, macaddress: String) {
+    private val soundUri =
+        Uri.parse("${ContentResolver.SCHEME_ANDROID_RESOURCE}://${applicationContext.packageName}/raw/alarm.mp3")
+
+    fun showNotification(notifyid: Int = 100, devicename: String, macaddress: String) {
         if (notificationManager.areNotificationsEnabled()) {
             val notifIntent = PendingIntent.getBroadcast(
                 applicationContext,
                 22,
-                Intent(applicationContext, NotificationReceiver::class.java).apply { putExtra("macaddress", macaddress) },
+                Intent(
+                    applicationContext,
+                    NotificationReceiver::class.java
+                ).apply { putExtra("macaddress", macaddress) },
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
             )
 
@@ -42,10 +46,12 @@ class NotificationService @Inject constructor(@ApplicationContext private val ap
                     notifIntent
                 )
                 .setSound(soundUri)
+                .setOnlyAlertOnce(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .build()
 
             //(0..1000000).shuffled().last()
-            notificationManager.notify(100, notification)
+            notificationManager.notify(notifyid, notification)
         }
     }
 }

@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
                 systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         }
+        val helper = Helper()
         val bluetoothStatusObserver = BluetoothStatusObserver(applicationContext)
         bluetoothStatusObserver.observeConnectivity().onEach {
             if (it == IBluetoothStatusObserver.BluetoothConnectivityStatus.UNAVAILABLE) {
@@ -103,7 +104,7 @@ class MainActivity : ComponentActivity() {
             println("BluetoothStatus : ${it.name}")
         }.launchIn(lifecycleScope)
 
-        bleScanner = BleScanner(applicationContext,userViewModel)
+        bleScanner = BleScanner(applicationContext, userViewModel)
 
         setContent {
             IvocaboTheme(
@@ -138,6 +139,7 @@ class MainActivity : ComponentActivity() {
                                             BleScanFilterItem(
                                                 name = deviceDetail?.name ?: "",
                                                 macaddress = a.uppercase(),
+                                                notifyid = helper.getRandomInt(),
                                                 stimulable = true
                                             )
                                         )

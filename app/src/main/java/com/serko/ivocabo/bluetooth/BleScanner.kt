@@ -33,6 +33,7 @@ interface IBleScanner {
 data class BleScanFilterItem(
     val name: String,
     val macaddress: String,
+    var notifyid: Int = 0,
     var stimulable: Boolean = false
 )
 
@@ -53,9 +54,10 @@ data class BleScannerResult(
     var disconnectedCounter: Int = 0,
 )
 
-class BleScanner(@ApplicationContext private val applicationContext: Context,
+class BleScanner(
+    @ApplicationContext private val applicationContext: Context,
     private val userViewModel: UserViewModel
-    ) : IBleScanner {
+) : IBleScanner {
     private val TAG = BleScanner::class.java.name
     private val gson = Gson()
     private val bluetoothManager =
@@ -93,12 +95,14 @@ class BleScanner(@ApplicationContext private val applicationContext: Context,
                                     .let { h ->
                                         h.disconnectedCounter += 1
                                         if (h.disconnectedCounter >= DISCONNECTEDCOUNTER) {
-                                            val filterItem = scanFilter.first { g -> g.macaddress == h.macaddress }
+                                            val filterItem =
+                                                scanFilter.first { g -> g.macaddress == h.macaddress }
                                             h.rssi = null
                                             h.status = BleScannerResultState.DISCONNECTED
                                             h.disconnectedCounter = 0
                                             if (filterItem.stimulable)
                                                 notifService.showNotification(
+                                                    filterItem.notifyid,
                                                     filterItem.name,
                                                     h.macaddress
                                                 )
@@ -126,6 +130,7 @@ class BleScanner(@ApplicationContext private val applicationContext: Context,
                             a.disconnectedCounter = 0
                             if (filterItem.stimulable)
                                 notifService.showNotification(
+                                    filterItem.notifyid,
                                     filterItem.name,
                                     a.macaddress
                                 )
