@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -37,6 +39,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -52,6 +57,7 @@ import com.serko.ivocabo.data.BleScanViewModel
 import com.serko.ivocabo.data.UserViewModel
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -63,7 +69,7 @@ fun TrackMyDevice(
     composeProgressStatus: MutableState<Boolean> = mutableStateOf(false)
 ) {
     val userviewModel = hiltViewModel<UserViewModel>()
-
+    val lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current.applicationContext
 
     val bluetoothPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
@@ -89,32 +95,63 @@ fun TrackMyDevice(
             val helper = Helper()
             //val scope = rememberCoroutineScope()
             var deviceDetail by remember { mutableStateOf(dummyDevice) }
-
-            val _deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress)
-                .collectAsStateWithLifecycle(initialValue = dummyDevice)
+            val metricValue = remember { mutableStateOf("") }
+            /* val _deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress)
+                 .collectAsStateWithLifecycle(initialValue = dummyDevice)*/
             var deviceIcon = R.drawable.t3_icon_32
 
             val _macaddress = macaddress.uppercase(Locale.ROOT)
 
 
-
-            val metricValue = remember { mutableStateOf("") }
             val getScanResult =
                 bleScanViewModel.getCurrentDeviceResult(_macaddress)
                     .collectAsStateWithLifecycle(initialValue = null)
             LaunchedEffect(Unit) {
-                delay(100)
-                bleScanViewModel.addItemToBleScannerFilter(_deviceDetail.value, false)
-                deviceDetail = _deviceDetail.value
+                userviewModel.getDeviceDetail(macaddress = macaddress).collect {
+                    deviceDetail = it
+                }
+                delay(300)
+                val currentScanFilterSize = BleScanner.scanFilter.size
+                if (deviceDetail.macaddress.isNotEmpty())
+                    bleScanViewModel.addItemToBleScannerFilter(deviceDetail, false, true)
+                if (currentScanFilterSize <= 0)
+                    MainActivity.bleScanner.StartScanning()
+
                 if (deviceDetail.devicetype != null) if (deviceDetail.devicetype == 2) deviceIcon =
                     R.drawable.e9_icon_32
-                if (getScanResult.value != null) {
-                    if (getScanResult.value!!.rssi != null)
+
+                bleScanViewModel.getCurrentDeviceResult(_macaddress).collect {
+                    if (it?.rssi != null)
                         metricValue.value =
-                            helper.CalculateRSSIToMeter(getScanResult.value!!.rssi) + "mt"
+                            helper.CalculateRSSIToMeter(it.rssi) + "mt"
                 }
             }
 
+
+
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    when (event) {
+                        Lifecycle.Event.ON_STOP -> {
+                            if (deviceDetail.istracking == null) {
+                                bleScanViewModel.removeItemToBleScannerFilter(_macaddress)
+                                bleScanViewModel.removeScanResultListItem(_macaddress)
+                                if (BleScanner.scanFilter.isEmpty())
+                                    MainActivity.bleScanner.StopScanning()
+                            } else {
+                                BleScanner.scanFilter.first { a -> a.macaddress == _macaddress }.onlytrackmydeviceevent =
+                                    false
+                            }
+                        }
+
+                        else -> {}
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
             Scaffold(
                 floatingActionButton = {
                     FloatingActionButton(containerColor = Color.Green,

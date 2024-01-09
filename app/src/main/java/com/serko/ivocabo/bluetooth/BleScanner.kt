@@ -24,6 +24,7 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.logging.Handler
+import javax.inject.Inject
 
 interface IBleScanner {
     fun StartScanning()
@@ -34,7 +35,8 @@ data class BleScanFilterItem(
     val name: String,
     val macaddress: String,
     var notifyid: Int = 0,
-    var stimulable: Boolean = false
+    var stimulable: Boolean = false,
+    var onlytrackmydeviceevent: Boolean = false
 )
 
 enum class BluetoothScanStates {
@@ -54,9 +56,8 @@ data class BleScannerResult(
     var disconnectedCounter: Int = 0,
 )
 
-class BleScanner(
+class BleScanner @Inject constructor(
     @ApplicationContext private val applicationContext: Context,
-    private val userViewModel: UserViewModel
 ) : IBleScanner {
     private val TAG = BleScanner::class.java.name
     private val gson = Gson()
@@ -64,7 +65,7 @@ class BleScanner(
         applicationContext.getSystemService(BluetoothManager::class.java) as BluetoothManager
     private val bluetoothAdapter = bluetoothManager.adapter
     private var bluetoothLeScanner: BluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
-    private val REPORT_DELAY = 2200L
+    private val REPORT_DELAY = 1000L
     private val DISCONNECTEDCOUNTER = 12
     private var notifService = NotificationService(applicationContext)
 
@@ -77,11 +78,14 @@ class BleScanner(
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             super.onScanResult(callbackType, result)
-            Log.v(TAG, gson.toJson(result))
+
         }
 
         override fun onBatchScanResults(results: MutableList<ScanResult>?) {
             super.onBatchScanResults(results)
+            //Log.v(TAG, "1")
+            Log.v(TAG, "scanFilter = ${gson.toJson(scanFilter)}")
+            //Log.v(TAG, "scanResults = ${gson.toJson(scanResults)}")
             if (scanResults.isNotEmpty()) {
                 //scanfilter listesinden kaldirilan ivolar eger scanresult da var ise scanresult listesinden de kaldirilir
                 scanResults.removeIf { a -> scanFilter.none { g -> g.macaddress.uppercase() == a.macaddress } }
@@ -100,6 +104,8 @@ class BleScanner(
                                             h.rssi = null
                                             h.status = BleScannerResultState.DISCONNECTED
                                             h.disconnectedCounter = 0
+                                            //Log.v(TAG, "scanResults2 = ${gson.toJson(h)}")
+
                                             if (filterItem.stimulable)
                                                 notifService.showNotification(
                                                     filterItem.notifyid,
@@ -137,6 +143,17 @@ class BleScanner(
                         }
                     }
                 }
+            } else {
+                scanFilter.onEach { a ->
+                    scanResults.add(
+                        BleScannerResult(
+                            macaddress = a.macaddress,
+                            rssi = null,
+                            status = BleScannerResultState.DISCONNECTED,
+                            disconnectedCounter = 0
+                        )
+                    )
+                }
             }
             results?.filter { a -> scanFilter.any { g -> g.macaddress == a.device.address } }
                 ?.onEach { r ->
@@ -157,6 +174,7 @@ class BleScanner(
                         }
                     }
                 }
+            //Log.v(TAG, "scanResults = ${gson.toJson(scanResults)}")
             /*if (scanResults.isNotEmpty())
                 Log.v(TAG, "scanResults = ${gson.toJson(scanResults)}")*/
 
@@ -176,11 +194,14 @@ class BleScanner(
     @SuppressLint("MissingPermission")
     override fun StartScanning() {
         bluetoothLeScanner.startScan(null, scanSettings, scanCallback)
+        Log.v(TAG, "Scan State = Start Scanning")
     }
 
     @SuppressLint("MissingPermission")
     override fun StopScanning() {
         bluetoothLeScanner.stopScan(scanCallback)
+        bluetoothLeScanner.flushPendingScanResults(scanCallback)
+        Log.v(TAG, "Scan State = Stop Scanning")
     }
 
     companion object {

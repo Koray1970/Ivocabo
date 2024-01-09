@@ -3,6 +3,9 @@ package com.serko.ivocabo
 import android.content.Context
 import android.util.Patterns
 import androidx.core.content.edit
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.serko.ivocabo.data.Device
 import java.sql.Date
 import java.text.DateFormat
 import java.text.SimpleDateFormat
@@ -12,7 +15,7 @@ import kotlin.math.pow
 import kotlin.math.round
 
 class Helper {
-
+    private val gson = Gson()
     fun javaUtilDateToJavaSqlDate(date: java.util.Date): java.sql.Date {
         return java.sql.Date(date.time)
     }
@@ -69,6 +72,23 @@ class Helper {
             val currentRssiRangeIn = beaconDefaultMinRSSI - rssi
             val distanceA = currentRssiRangeIn.toDouble() * .05
             return (round(10 * Math.pow(10.0, distanceA)) / 10).toString()
+        }
+        return null
+    }
+
+    fun deviceStringToTypeClass(devicestr: String?): ArrayList<Device>? {
+        if (!devicestr.isNullOrEmpty()) {
+            return gson.fromJson<ArrayList<Device>>(
+                devicestr,
+                object : TypeToken<ArrayList<Device>>() {}.type
+            )
+        }
+        return null
+    }
+
+    fun deviceTypeClassToString(devices: ArrayList<Device>?): String? {
+        if (!devices.isNullOrEmpty()) {
+            return gson.toJson(devices)
         }
         return null
     }

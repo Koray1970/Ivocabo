@@ -16,6 +16,7 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.serko.ivocabo.bluetooth.BleScanFilterItem
 import com.serko.ivocabo.bluetooth.BleScanner
 import com.serko.ivocabo.bluetooth.BluetoothScanStates
@@ -104,7 +106,7 @@ class MainActivity : ComponentActivity() {
             println("BluetoothStatus : ${it.name}")
         }.launchIn(lifecycleScope)
 
-        bleScanner = BleScanner(applicationContext, userViewModel)
+        bleScanner = BleScanner(applicationContext)
 
         setContent {
             IvocaboTheme(
@@ -117,7 +119,7 @@ class MainActivity : ComponentActivity() {
                     bleScanViewModel.scanDevices().collectAsStateWithLifecycle(
                         initialValue = emptyList()
                     )
-                scope.launch {
+                LaunchedEffect(Unit) {
 
                     while (true) {
                         when (deviceScanListResult.value.isEmpty()) {
@@ -129,8 +131,12 @@ class MainActivity : ComponentActivity() {
                             }
 
                             false -> {
-                                if (BleScanner.scanFilter.isNotEmpty())
-                                    BleScanner.scanFilter.removeIf { a -> deviceScanListResult.value.none { g -> g.uppercase() == a.macaddress.uppercase() } }
+                                var compareResult = 0
+                                if (BleScanner.scanFilter.isNotEmpty()) {
+                                    //compare scanfilter with devicescanlistresult
+                                    if (BleScanner.scanFilter.size > deviceScanListResult.value.size)
+                                        BleScanner.scanFilter.removeIf { a -> deviceScanListResult.value.none { g -> g.uppercase() == a.macaddress.uppercase() } && !a.onlytrackmydeviceevent }
+                                }
                                 deviceScanListResult.value.onEach { a ->
                                     if (BleScanner.scanFilter.none { g -> g.macaddress.uppercase() == a.uppercase() }) {
                                         val deviceDetail =
@@ -145,8 +151,9 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                 }
-
-
+                                if (BleScanner.scanResults.isNotEmpty()) {
+                                    BleScanner.scanResults.removeIf { a -> deviceScanListResult.value.none { c -> c.uppercase() == a.macaddress.uppercase() } }
+                                }
                                 if (BleScanner.scanStatus.value == BluetoothScanStates.INIT) {
                                     bleScanner.StartScanning()
                                     BleScanner.scanStatus.value = BluetoothScanStates.SCANNING

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.serko.ivocabo.Helper
+import com.serko.ivocabo.MainActivity
 import com.serko.ivocabo.bluetooth.BleScanFilterItem
 import com.serko.ivocabo.bluetooth.BleScanner
 import com.serko.ivocabo.bluetooth.BleScannerResult
@@ -84,34 +85,42 @@ class BleScanViewModel @Inject constructor(
 
     fun removeScanResultListItem(macAddress: String) {
         if (_scanResultItems.isNotEmpty()) {
-            _scanResultItems.removeIf { a -> a.macaddress == macAddress }
+            _scanResultItems.removeIf { a -> a.macaddress.uppercase() == macAddress.uppercase() }
         }
     }
 
-    fun addItemToBleScannerFilter(device: Device, isStimulable: Boolean = false) {
-        if (BleScanner.scanFilter.none { a -> a.macaddress.uppercase() == device.macaddress.uppercase() })
+    fun addItemToBleScannerFilter(
+        device: Device,
+        isStimulable: Boolean = false,
+        isonlytrackmydevice: Boolean
+    ) {
+        if (BleScanner.scanFilter.none { a -> a.macaddress.uppercase() == device.macaddress.uppercase() }) {
+            MainActivity.bleScanner.StopScanning()
             BleScanner.scanFilter.add(
                 BleScanFilterItem(
                     name = device.name,
                     macaddress = device.macaddress.uppercase(),
-                    stimulable = isStimulable
+                    stimulable = isStimulable,
+                    onlytrackmydeviceevent = isonlytrackmydevice
                 )
             )
+            MainActivity.bleScanner.StartScanning()
+        }
     }
 
     fun removeItemToBleScannerFilter(macAddress: String) {
         BleScanner.scanFilter.removeIf { a -> a.macaddress.uppercase() == macAddress.uppercase() }
     }
 
-    fun getCurrentDeviceResult(macAddress: String) = callbackFlow<BleScannerResult?> {
+    fun getCurrentDeviceResult(macAddress: String) = flow<BleScannerResult?> {
         while (true) {
             if (BleScanner.scanResults.any { a -> a.macaddress == macAddress.uppercase() }) {
-                trySend(
+                emit(
                     BleScanner.scanResults.first { a -> a.macaddress == macAddress.uppercase() }
                 )
             } else
-                trySend(null)
-            delay(2000)
+                emit(null)
+            delay(1000)
         }
     }
 }

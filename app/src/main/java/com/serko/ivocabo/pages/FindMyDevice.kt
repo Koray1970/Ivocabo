@@ -83,7 +83,6 @@ fun FindMyDevice(
             .collectAsStateWithLifecycle(initialValue = dummyDevice)
 
 
-
         val metricValue = remember { mutableStateOf("") }
         val getScanResult =
             bleScanViewModel.getCurrentDeviceResult(mMacaddress)
@@ -91,7 +90,7 @@ fun FindMyDevice(
 
         LaunchedEffect(Unit) {
             delay(100)
-            bleScanViewModel.addItemToBleScannerFilter(_deviceDetail.value, false)
+            bleScanViewModel.addItemToBleScannerFilter(_deviceDetail.value, false, true)
             deviceDetail = _deviceDetail.value
             if (deviceDetail.devicetype != null) if (deviceDetail.devicetype == 2) deviceIcon =
                 R.drawable.e9_icon_32

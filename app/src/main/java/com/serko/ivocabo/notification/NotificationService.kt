@@ -26,7 +26,7 @@ class NotificationService @Inject constructor(@ApplicationContext private val ap
         if (notificationManager.areNotificationsEnabled()) {
             val notifIntent = PendingIntent.getBroadcast(
                 applicationContext,
-                22,
+                (0..1000000).shuffled().last(),
                 Intent(
                     applicationContext,
                     NotificationReceiver::class.java
@@ -34,19 +34,18 @@ class NotificationService @Inject constructor(@ApplicationContext private val ap
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
             )
 
-            Log.v("BleScanner", "macaddress = $macaddress")
+            //Log.v("BleScanner", "macaddress = $macaddress")
             val notification = NotificationCompat.Builder(applicationContext, "ivoNotification")
                 .setSmallIcon(R.drawable.t3_icon_32)
                 .setContentTitle(applicationContext.getString(R.string.ntf_title))
                 .setContentText(String.format(contentText, devicename))
                 .addAction(
                     R.drawable.baseline_clear_24,
-                    macaddress,
-                    //applicationContext.getString(R.string.removefromscanlist),
+                    applicationContext.getString(R.string.removefromscanlist),
                     notifIntent
                 )
                 .setSound(soundUri)
-                .setOnlyAlertOnce(true)
+                //.setOnlyAlertOnce(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .build()
 
