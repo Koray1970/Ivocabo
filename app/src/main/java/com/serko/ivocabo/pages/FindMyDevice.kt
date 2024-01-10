@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -37,13 +39,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.MultiplePermissionsState
 import com.serko.ivocabo.BluetoothPermission
 import com.serko.ivocabo.Helper
+import com.serko.ivocabo.MainActivity
 import com.serko.ivocabo.R
+import com.serko.ivocabo.bluetooth.BleScanner
+import com.serko.ivocabo.bluetooth.BleScannerResultState
 import com.serko.ivocabo.data.BleScanViewModel
 import com.serko.ivocabo.data.UserViewModel
 import kotlinx.coroutines.MainScope
@@ -60,6 +68,7 @@ fun FindMyDevice(
 ) {
     composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
+    val lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current
     val userviewModel = hiltViewModel<UserViewModel>()
     val bluetoothPermissionStatus: Pair<Boolean, MultiplePermissionsState> =
         BluetoothPermission(context)
@@ -79,36 +88,58 @@ fun FindMyDevice(
         var deviceDetail by remember { mutableStateOf(dummyDevice) }
         var deviceIcon = R.drawable.t3_icon_32
 
-        val _deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress)
-            .collectAsStateWithLifecycle(initialValue = dummyDevice)
-
 
         val metricValue = remember { mutableStateOf("") }
-        val getScanResult =
-            bleScanViewModel.getCurrentDeviceResult(mMacaddress)
-                .collectAsStateWithLifecycle(initialValue = null)
-        var disconnectedcontrol = 0
+
 
         LaunchedEffect(Unit) {
-            delay(100)
-            bleScanViewModel.addItemToBleScannerFilter(_deviceDetail.value, false, true)
-            deviceDetail = _deviceDetail.value
+            userviewModel.getDeviceDetail(macaddress = macaddress).collect {
+                deviceDetail = it
+            }
+            delay(300)
+            val currentScanFilterSize = BleScanner.scanFilter.size
+            if (deviceDetail.macaddress.isNotEmpty())
+                bleScanViewModel.addItemToBleScannerFilter(deviceDetail, false, true)
+            if (currentScanFilterSize <= 0)
+                MainActivity.bleScanner.StartScanning()
+
             if (deviceDetail.devicetype != null) if (deviceDetail.devicetype == 2) deviceIcon =
                 R.drawable.e9_icon_32
-            while (true) {
-                if (getScanResult.value != null) {
-                    if (getScanResult.value!!.rssi != null)
-                        metricValue.value =
-                            helper.CalculateRSSIToMeter(getScanResult.value!!.rssi) + "mt"
-                } else {
-                    metricValue.value = context.getString(R.string.connectingtodevice)
-                    disconnectedcontrol += 1
-                    if (disconnectedcontrol >= 12) {
+
+
+            bleScanViewModel.getCurrentDeviceResult(mMacaddress).collect {
+                if (it?.rssi != null)
+                    metricValue.value =
+                        helper.CalculateRSSIToMeter(it.rssi) + "mt"
+                else {
+                    if (it?.status == BleScannerResultState.DISCONNECTED)
                         metricValue.value = context.getString(R.string.devicecannotbereached)
-                        disconnectedcontrol = 0
-                    }
+                    else
+                        metricValue.value = context.getString(R.string.connectingtodevice)
                 }
-                delay(2000L)
+            }
+        }
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_STOP -> {
+                        if (deviceDetail.istracking == null) {
+                            bleScanViewModel.removeItemToBleScannerFilter(mMacaddress)
+                            bleScanViewModel.removeScanResultListItem(mMacaddress)
+                            if (BleScanner.scanFilter.isEmpty())
+                                MainActivity.bleScanner.StopScanning()
+                        } else {
+                            BleScanner.scanFilter.first { a -> a.macaddress == mMacaddress }.onlytrackmydeviceevent =
+                                false
+                        }
+                    }
+
+                    else -> {}
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
             }
         }
 

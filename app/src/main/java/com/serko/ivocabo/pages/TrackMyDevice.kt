@@ -53,6 +53,7 @@ import com.serko.ivocabo.NotificationPermission
 import com.serko.ivocabo.R
 import com.serko.ivocabo.bluetooth.BleScanFilterItem
 import com.serko.ivocabo.bluetooth.BleScanner
+import com.serko.ivocabo.bluetooth.BleScannerResultState
 import com.serko.ivocabo.data.BleScanViewModel
 import com.serko.ivocabo.data.UserViewModel
 import kotlinx.coroutines.MainScope
@@ -96,16 +97,11 @@ fun TrackMyDevice(
             //val scope = rememberCoroutineScope()
             var deviceDetail by remember { mutableStateOf(dummyDevice) }
             val metricValue = remember { mutableStateOf("") }
-            /* val _deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress)
-                 .collectAsStateWithLifecycle(initialValue = dummyDevice)*/
+
             var deviceIcon = R.drawable.t3_icon_32
 
             val _macaddress = macaddress.uppercase(Locale.ROOT)
 
-
-            val getScanResult =
-                bleScanViewModel.getCurrentDeviceResult(_macaddress)
-                    .collectAsStateWithLifecycle(initialValue = null)
             LaunchedEffect(Unit) {
                 userviewModel.getDeviceDetail(macaddress = macaddress).collect {
                     deviceDetail = it
@@ -120,10 +116,17 @@ fun TrackMyDevice(
                 if (deviceDetail.devicetype != null) if (deviceDetail.devicetype == 2) deviceIcon =
                     R.drawable.e9_icon_32
 
+
                 bleScanViewModel.getCurrentDeviceResult(_macaddress).collect {
                     if (it?.rssi != null)
                         metricValue.value =
                             helper.CalculateRSSIToMeter(it.rssi) + "mt"
+                    else {
+                        if (it?.status == BleScannerResultState.DISCONNECTED)
+                            metricValue.value = context.getString(R.string.devicecannotbereached)
+                        else
+                            metricValue.value = context.getString(R.string.connectingtodevice)
+                    }
                 }
             }
 

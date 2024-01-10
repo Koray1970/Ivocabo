@@ -31,7 +31,7 @@ enum class BluetoothScanStates {
     INIT, SCANNING
 }
 
-enum class BleScannerResultState { INIT, CONNECTED, DISCONNECTED }
+enum class BleScannerResultState { INIT, SCANNING, CONNECTED, DISCONNECTED }
 data class BleScannerEventResult(
     val haserror: Boolean = false,
     val exception: String? = null
@@ -42,6 +42,7 @@ data class BleScannerResult(
     var rssi: Int? = null,
     var status: BleScannerResultState = BleScannerResultState.INIT,
     var disconnectedCounter: Int = 0,
+    var resultpoint: String = ""
 )
 
 class BleScanner @Inject constructor(
@@ -53,7 +54,7 @@ class BleScanner @Inject constructor(
         applicationContext.getSystemService(BluetoothManager::class.java) as BluetoothManager
     private val bluetoothAdapter = bluetoothManager.adapter
     private var bluetoothLeScanner: BluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
-    private val REPORT_DELAY = 1000L
+    private val REPORT_DELAY = 2600L
     private val DISCONNECTEDCOUNTER = 12
     private var notifService = NotificationService(applicationContext)
 
@@ -81,27 +82,104 @@ class BleScanner @Inject constructor(
             if (!results.isNullOrEmpty()) {
                 //scanfilter listesinde olan ama arama sonuclari listesinde olmayanlar filtrelenir
                 //ve scan filterda olmayanlarin disconnectedcounter elemani bir arttirilir
-                if (results.any { a -> scanFilter.any { g -> g.macaddress.uppercase() == a.device.address } }) {
+                scanFilter.onEach { g ->
+                    val getFromResults = results.filter { a -> a.device.address == g.macaddress }
+                    if (getFromResults.isNotEmpty()) {
+                        //eger bluetooth tarama sonuclari icinde scanfilter da ki mac adresi var ise
+                        //Yani CONNECT OLMUSLAR
+                        if (scanResults.any { a -> a.macaddress.uppercase() == g.macaddress.uppercase() }) {
+                            //scanresult icinde scan filterdaki mac adress var ise CONNECTED olacak
+                            scanResults.first { a -> a.macaddress.uppercase() == g.macaddress.uppercase() }
+                                .let {
+                                    it.disconnectedCounter = 0
+                                    it.status = BleScannerResultState.CONNECTED
+                                    it.rssi = getFromResults.first().rssi
+                                    it.resultpoint = "G1"
+                                }
+                        } else {
+                            //scanresult icinde scan filterdaki mac adress yok ise YENI ScanResult Eklenecek
+                            scanResults.add(
+                                BleScannerResult(
+                                    macaddress = g.macaddress.uppercase(),
+                                    rssi = getFromResults.first().rssi,
+                                    status = BleScannerResultState.CONNECTED,
+                                    disconnectedCounter = 0,
+                                    resultpoint = "G2"
+                                )
+                            )
+                        }
+                    } else {
+                        //eger bluetooth tarama sonuclari icinde scanfilter da ki mac adresi yok ise
+                        //YANI LOST OLMUSLAR
+                        if (scanResults.any { a -> a.macaddress.uppercase() == g.macaddress.uppercase() }) {
+                            //scanresult icinde scan filterdaki mac adress var ise
+                            scanResults.first { a -> a.macaddress.uppercase() == g.macaddress.uppercase() }
+                                .let {
+                                    it.disconnectedCounter += 1
+                                    //it.status = BleScannerResultState.CONNECTED
+                                    it.resultpoint = "G3"
+                                    if (it.disconnectedCounter >= DISCONNECTEDCOUNTER) {
+                                        it.status = BleScannerResultState.DISCONNECTED
+                                        it.disconnectedCounter = 0
+                                        it.rssi = null
+                                        if (g.stimulable) {
+                                            it.resultpoint = "G3A"
+                                            notifService.showNotification(
+                                                g.notifyid,
+                                                g.name,
+                                                g.macaddress.uppercase()
+                                            )
+                                        }
+                                    }
+                                }
+
+                        } else {
+                            //scanresult icinde scan filterdaki mac adress yok ise
+                            scanResults.add(
+                                BleScannerResult(
+                                    macaddress = g.macaddress.uppercase(),
+                                    rssi = null,
+                                    status = BleScannerResultState.SCANNING,
+                                    disconnectedCounter = 0,
+                                    resultpoint = "G4"
+                                )
+                            )
+                        }
+                    }
+                }
+
+            }
+
+
+
+                /*if (results.any { a -> scanFilter.any { g -> g.macaddress.uppercase() == a.device.address } }) {
                     scanFilter.filter { a -> results.none { g -> g.device.address == a.macaddress.uppercase() } }
                         .onEach { c ->
                             if (scanResults.any { a -> a.macaddress == c.macaddress.uppercase() }) {
                                 scanResults.first { g -> g.macaddress == c.macaddress.uppercase() }
                                     .let { h ->
-                                        h.disconnectedCounter += 1
-                                        if (h.disconnectedCounter >= DISCONNECTEDCOUNTER) {
-                                            val filterItem =
-                                                scanFilter.first { g -> g.macaddress == h.macaddress }
-                                            h.rssi = null
-                                            h.status = BleScannerResultState.DISCONNECTED
-                                            h.disconnectedCounter = 0
-                                            //Log.v(TAG, "scanResults2 = ${gson.toJson(h)}")
+                                        val filt =
+                                            results.first { v -> v.device.address == h.macaddress.uppercase() }
 
-                                            if (filterItem.stimulable)
-                                                notifService.showNotification(
-                                                    filterItem.notifyid,
-                                                    filterItem.name,
-                                                    h.macaddress
-                                                )
+                                        h.disconnectedCounter = 0
+                                        h.status = BleScannerResultState.CONNECTED
+                                        h.rssi = filt.rssi
+                                        h.resultpoint = "G1"
+                                        if (filt == null) {
+                                            if (h.disconnectedCounter >= DISCONNECTEDCOUNTER) {
+                                                val filterItem =
+                                                    scanFilter.first { g -> g.macaddress == h.macaddress }
+                                                h.rssi = null
+                                                h.status = BleScannerResultState.DISCONNECTED
+                                                h.disconnectedCounter = 0
+                                                h.resultpoint = "G2"
+                                                if (filterItem.stimulable)
+                                                    notifService.showNotification(
+                                                        filterItem.notifyid,
+                                                        filterItem.name,
+                                                        h.macaddress
+                                                    )
+                                            }
                                         }
                                     }
                             } else {
@@ -109,8 +187,9 @@ class BleScanner @Inject constructor(
                                     BleScannerResult(
                                         macaddress = c.macaddress.uppercase(),
                                         rssi = null,
-                                        status = BleScannerResultState.INIT,
-                                        disconnectedCounter = 1
+                                        status = BleScannerResultState.SCANNING,
+                                        disconnectedCounter = 0,
+                                        resultpoint = "G3"
                                     )
                                 )
                             }
@@ -119,29 +198,29 @@ class BleScanner @Inject constructor(
                     //scanfilter da ki devicelar result in icinde yok ise
 
                     scanFilter.onEach { a ->
-                        Log.v(TAG, "scanResults = ${gson.toJson(scanResults)}")
                         if (scanResults.isNotEmpty()) {
-                            Log.v(TAG, "V1")
                             if (scanResults.none { g -> g.macaddress.uppercase() == a.macaddress.uppercase() }) {
-                                Log.v(TAG, "V2")
                                 scanResults.add(
                                     BleScannerResult(
                                         macaddress = a.macaddress.uppercase(),
                                         rssi = null,
                                         status = BleScannerResultState.DISCONNECTED,
-                                        disconnectedCounter = 0
+                                        disconnectedCounter = 0,
+                                        resultpoint = "V1"
                                     )
                                 )
                             } else {
-                                Log.v(TAG, "V3")
                                 scanResults.first { h -> h.macaddress.uppercase() == a.macaddress.uppercase() }
                                     .let {
                                         it.disconnectedCounter += 1
-                                        if(it.disconnectedCounter>=DISCONNECTEDCOUNTER){
-                                            it.disconnectedCounter=0
+                                        it.status = BleScannerResultState.SCANNING
+                                        it.resultpoint = "V2"
+                                        if (it.disconnectedCounter >= DISCONNECTEDCOUNTER) {
+                                            it.disconnectedCounter = 0
                                             it.status = BleScannerResultState.DISCONNECTED
                                             it.rssi = null
-                                            if(a.stimulable){
+                                            it.resultpoint = "V3"
+                                            if (a.stimulable) {
                                                 notifService.showNotification(
                                                     a.notifyid,
                                                     a.name,
@@ -152,13 +231,13 @@ class BleScanner @Inject constructor(
                                     }
                             }
                         } else {
-                            Log.v(TAG, "V4")
                             scanResults.add(
                                 BleScannerResult(
                                     macaddress = a.macaddress.uppercase(),
                                     rssi = null,
                                     status = BleScannerResultState.DISCONNECTED,
-                                    disconnectedCounter = 0
+                                    disconnectedCounter = 0,
+                                    resultpoint = "V4"
                                 )
                             )
                         }
@@ -181,7 +260,7 @@ class BleScanner @Inject constructor(
                             )
                     }
                 }
-            }
+            }*/
             /*} else {
                 scanFilter.onEach { a ->
                     scanResults.add(
@@ -194,7 +273,8 @@ class BleScanner @Inject constructor(
                     )
                 }
             }*/
-            results?.filter { a -> scanFilter.any { g -> g.macaddress == a.device.address } }
+
+            /*results?.filter { a -> scanFilter.any { g -> g.macaddress == a.device.address } }
                 ?.onEach { r ->
                     if (scanResults.none { a -> a.macaddress == r.device.address }) {
                         scanResults.add(
@@ -212,8 +292,8 @@ class BleScanner @Inject constructor(
                             a.status = BleScannerResultState.CONNECTED
                         }
                     }
-                }
-
+                }*/
+            Log.v(TAG, "scanResults = ${gson.toJson(scanResults)}")
             /*if (scanResults.isNotEmpty())
                 Log.v(TAG, "scanResults = ${gson.toJson(scanResults)}")*/
 
@@ -246,6 +326,7 @@ class BleScanner @Inject constructor(
     companion object {
         var scanStatus = mutableStateOf(BluetoothScanStates.INIT)
         var scanFilter = mutableListOf<BleScanFilterItem>()
+
         //var eventResult = mutableStateOf(BleScannerEventResult())
         var scanResults = mutableListOf<BleScannerResult>()
     }

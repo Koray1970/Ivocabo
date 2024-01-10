@@ -89,8 +89,6 @@ fun DeviceDashboard(
     macaddress: String?,
     navController: NavController,
     composeProgressStatus: MutableState<Boolean> = mutableStateOf(false),
-
-    //locationViewModel: LocationViewModel = hiltViewModel()
 ) {
     composeProgressStatus.value = true
     val context = LocalContext.current.applicationContext
@@ -114,8 +112,6 @@ fun DeviceDashboard(
             }
             composeProgressStatus.value = false
         } else {
-            val scope = rememberCoroutineScope()
-            //var deviceDetail by remember { mutableStateOf(dummyDevice) }
             var chkNotificationCheckState by remember { mutableStateOf(false) }
 
             var chkMissingCheckState by remember { mutableStateOf(false) }
@@ -131,7 +127,7 @@ fun DeviceDashboard(
                 .collectAsStateWithLifecycle(initialValue = LatLng(0.0, 0.0))
             val deviceDetail = userviewModel.getDeviceDetail(macaddress = macaddress!!)
                 .collectAsStateWithLifecycle(initialValue = dummyDevice)
-            scope.launch {
+            LaunchedEffect(Unit) {
                 delay(1000)
                 if (deviceDetail.value.istracking != null) chkNotificationCheckState =
                     deviceDetail.value.istracking == true
@@ -158,6 +154,10 @@ fun DeviceDashboard(
                     }
                     delay(1000)
                 }
+
+                //update device detail
+                userviewModel.addUpdateDevice(deviceDetail.value)
+
                 composeProgressStatus.value = false
             }
             //end:Map Properties

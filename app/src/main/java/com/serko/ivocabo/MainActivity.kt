@@ -135,7 +135,8 @@ class MainActivity : ComponentActivity() {
                                 if (BleScanner.scanFilter.isNotEmpty()) {
                                     //compare scanfilter with devicescanlistresult
                                     if (BleScanner.scanFilter.size > deviceScanListResult.value.size)
-                                        BleScanner.scanFilter.removeIf { a -> deviceScanListResult.value.none { g -> g.uppercase() == a.macaddress.uppercase() } && !a.onlytrackmydeviceevent }
+                                        BleScanner.scanFilter.filter { a -> !a.onlytrackmydeviceevent }.toMutableList()
+                                            .removeIf { a -> deviceScanListResult.value.none { g -> g.uppercase() == a.macaddress.uppercase() } }
                                 }
                                 deviceScanListResult.value.onEach { a ->
                                     if (BleScanner.scanFilter.none { g -> g.macaddress.uppercase() == a.uppercase() }) {
@@ -151,9 +152,9 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                 }
-                                if (BleScanner.scanResults.isNotEmpty()) {
+                                /*if (BleScanner.scanResults.isNotEmpty()) {
                                     BleScanner.scanResults.removeIf { a -> deviceScanListResult.value.none { c -> c.uppercase() == a.macaddress.uppercase() } }
-                                }
+                                }*/
                                 if (BleScanner.scanStatus.value == BluetoothScanStates.INIT) {
                                     bleScanner.StartScanning()
                                     BleScanner.scanStatus.value = BluetoothScanStates.SCANNING
