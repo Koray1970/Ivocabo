@@ -4,26 +4,14 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
-import android.os.HandlerThread
-import android.os.Looper
 import android.util.Log
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.gson.Gson
-import com.serko.ivocabo.MainActivity
-import com.serko.ivocabo.data.UserViewModel
 import com.serko.ivocabo.notification.NotificationService
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import java.util.logging.Handler
 import javax.inject.Inject
 
 interface IBleScanner {
@@ -84,14 +72,16 @@ class BleScanner @Inject constructor(
         override fun onBatchScanResults(results: MutableList<ScanResult>?) {
             super.onBatchScanResults(results)
             //Log.v(TAG, "1")
-            Log.v(TAG, "scanFilter = ${gson.toJson(scanFilter)}")
+            //Log.v(TAG, "scanFilter = ${gson.toJson(scanFilter)}")
             //Log.v(TAG, "scanResults = ${gson.toJson(scanResults)}")
-            if (scanResults.isNotEmpty()) {
-                //scanfilter listesinden kaldirilan ivolar eger scanresult da var ise scanresult listesinden de kaldirilir
+            //if (scanResults.isNotEmpty()) {
+            //scanfilter listesinden kaldirilan ivolar eger scanresult da var ise scanresult listesinden de kaldirilir
+            if (scanResults.isNotEmpty())
                 scanResults.removeIf { a -> scanFilter.none { g -> g.macaddress.uppercase() == a.macaddress } }
-                if (!results.isNullOrEmpty()) {
-                    //scanfilter listesinde olan ama arama sonuclari listesinde olmayanlar filtrelenir
-                    //ve scan filterda olmayanlarin disconnectedcounter elemani bir arttirilir
+            if (!results.isNullOrEmpty()) {
+                //scanfilter listesinde olan ama arama sonuclari listesinde olmayanlar filtrelenir
+                //ve scan filterda olmayanlarin disconnectedcounter elemani bir arttirilir
+                if (results.any { a -> scanFilter.any { g -> g.macaddress.uppercase() == a.device.address } }) {
                     scanFilter.filter { a -> results.none { g -> g.device.address == a.macaddress.uppercase() } }
                         .onEach { c ->
                             if (scanResults.any { a -> a.macaddress == c.macaddress.uppercase() }) {
@@ -126,35 +116,84 @@ class BleScanner @Inject constructor(
                             }
                         }
                 } else {
-                    //results
-                    scanResults.onEach { a ->
-                        a.disconnectedCounter += 1
-                        if (a.disconnectedCounter >= DISCONNECTEDCOUNTER) {
-                            val filterItem = scanFilter.first { g -> g.macaddress == a.macaddress }
-                            a.rssi = null
-                            a.status = BleScannerResultState.DISCONNECTED
-                            a.disconnectedCounter = 0
-                            if (filterItem.stimulable)
-                                notifService.showNotification(
-                                    filterItem.notifyid,
-                                    filterItem.name,
-                                    a.macaddress
+                    //scanfilter da ki devicelar result in icinde yok ise
+
+                    scanFilter.onEach { a ->
+                        Log.v(TAG, "scanResults = ${gson.toJson(scanResults)}")
+                        if (scanResults.isNotEmpty()) {
+                            Log.v(TAG, "V1")
+                            if (scanResults.none { g -> g.macaddress.uppercase() == a.macaddress.uppercase() }) {
+                                Log.v(TAG, "V2")
+                                scanResults.add(
+                                    BleScannerResult(
+                                        macaddress = a.macaddress.uppercase(),
+                                        rssi = null,
+                                        status = BleScannerResultState.DISCONNECTED,
+                                        disconnectedCounter = 0
+                                    )
                                 )
+                            } else {
+                                Log.v(TAG, "V3")
+                                scanResults.first { h -> h.macaddress.uppercase() == a.macaddress.uppercase() }
+                                    .let {
+                                        it.disconnectedCounter += 1
+                                        if(it.disconnectedCounter>=DISCONNECTEDCOUNTER){
+                                            it.disconnectedCounter=0
+                                            it.status = BleScannerResultState.DISCONNECTED
+                                            it.rssi = null
+                                            if(a.stimulable){
+                                                notifService.showNotification(
+                                                    a.notifyid,
+                                                    a.name,
+                                                    a.macaddress
+                                                )
+                                            }
+                                        }
+                                    }
+                            }
+                        } else {
+                            Log.v(TAG, "V4")
+                            scanResults.add(
+                                BleScannerResult(
+                                    macaddress = a.macaddress.uppercase(),
+                                    rssi = null,
+                                    status = BleScannerResultState.DISCONNECTED,
+                                    disconnectedCounter = 0
+                                )
+                            )
                         }
                     }
                 }
             } else {
+                //results bos ise
+                scanResults.onEach { a ->
+                    a.disconnectedCounter += 1
+                    if (a.disconnectedCounter >= DISCONNECTEDCOUNTER) {
+                        val filterItem = scanFilter.first { g -> g.macaddress == a.macaddress }
+                        a.rssi = null
+                        a.status = BleScannerResultState.DISCONNECTED
+                        a.disconnectedCounter = 0
+                        if (filterItem.stimulable)
+                            notifService.showNotification(
+                                filterItem.notifyid,
+                                filterItem.name,
+                                a.macaddress
+                            )
+                    }
+                }
+            }
+            /*} else {
                 scanFilter.onEach { a ->
                     scanResults.add(
                         BleScannerResult(
-                            macaddress = a.macaddress,
+                            macaddress = a.macaddress.uppercase(),
                             rssi = null,
                             status = BleScannerResultState.DISCONNECTED,
                             disconnectedCounter = 0
                         )
                     )
                 }
-            }
+            }*/
             results?.filter { a -> scanFilter.any { g -> g.macaddress == a.device.address } }
                 ?.onEach { r ->
                     if (scanResults.none { a -> a.macaddress == r.device.address }) {
@@ -174,7 +213,7 @@ class BleScanner @Inject constructor(
                         }
                     }
                 }
-            //Log.v(TAG, "scanResults = ${gson.toJson(scanResults)}")
+
             /*if (scanResults.isNotEmpty())
                 Log.v(TAG, "scanResults = ${gson.toJson(scanResults)}")*/
 
@@ -207,7 +246,7 @@ class BleScanner @Inject constructor(
     companion object {
         var scanStatus = mutableStateOf(BluetoothScanStates.INIT)
         var scanFilter = mutableListOf<BleScanFilterItem>()
-        var eventResult = mutableStateOf(BleScannerEventResult())
+        //var eventResult = mutableStateOf(BleScannerEventResult())
         var scanResults = mutableListOf<BleScannerResult>()
     }
 }

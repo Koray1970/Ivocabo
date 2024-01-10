@@ -87,6 +87,7 @@ fun FindMyDevice(
         val getScanResult =
             bleScanViewModel.getCurrentDeviceResult(mMacaddress)
                 .collectAsStateWithLifecycle(initialValue = null)
+        var disconnectedcontrol = 0
 
         LaunchedEffect(Unit) {
             delay(100)
@@ -99,6 +100,13 @@ fun FindMyDevice(
                     if (getScanResult.value!!.rssi != null)
                         metricValue.value =
                             helper.CalculateRSSIToMeter(getScanResult.value!!.rssi) + "mt"
+                } else {
+                    metricValue.value = context.getString(R.string.connectingtodevice)
+                    disconnectedcontrol += 1
+                    if (disconnectedcontrol >= 12) {
+                        metricValue.value = context.getString(R.string.devicecannotbereached)
+                        disconnectedcontrol = 0
+                    }
                 }
                 delay(2000L)
             }
