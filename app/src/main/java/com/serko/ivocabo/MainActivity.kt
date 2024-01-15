@@ -25,6 +25,10 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequest
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.serko.ivocabo.bluetooth.BleScanFilterItem
 import com.serko.ivocabo.bluetooth.BleScanner
 import com.serko.ivocabo.bluetooth.BluetoothScanStates
@@ -39,6 +43,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 //koko
 //koko@gmail.com
@@ -106,6 +111,14 @@ class MainActivity : ComponentActivity() {
             println("BluetoothStatus : ${it.name}")
         }.launchIn(lifecycleScope)
 
+        val mdCheckerWorkRequest =
+            PeriodicWorkRequestBuilder<MissingDeviceWorker>(3, TimeUnit.MINUTES).build()
+        WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
+            "missingdevicecheck",
+            ExistingPeriodicWorkPolicy.KEEP,
+            mdCheckerWorkRequest
+        )
+
         bleScanner = BleScanner(applicationContext)
 
         setContent {
@@ -135,7 +148,8 @@ class MainActivity : ComponentActivity() {
                                 if (BleScanner.scanFilter.isNotEmpty()) {
                                     //compare scanfilter with devicescanlistresult
                                     if (BleScanner.scanFilter.size > deviceScanListResult.value.size)
-                                        BleScanner.scanFilter.filter { a -> !a.onlytrackmydeviceevent }.toMutableList()
+                                        BleScanner.scanFilter.filter { a -> !a.onlytrackmydeviceevent }
+                                            .toMutableList()
                                             .removeIf { a -> deviceScanListResult.value.none { g -> g.uppercase() == a.macaddress.uppercase() } }
                                 }
                                 deviceScanListResult.value.onEach { a ->

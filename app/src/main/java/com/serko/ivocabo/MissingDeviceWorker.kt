@@ -7,6 +7,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.google.gson.Gson
 import com.serko.ivocabo.api.IApiService
 import com.serko.ivocabo.bluetooth.BleScanFilterItem
 import com.serko.ivocabo.bluetooth.BleScanner
@@ -35,6 +36,7 @@ class MissingDeviceWorker @AssistedInject constructor(
 ) :
     CoroutineWorker(context, parameters) {
     val appcontext = context.applicationContext
+    val gson = Gson()
     override suspend fun doWork(): Result {
 
         //remove from database
@@ -53,10 +55,11 @@ class MissingDeviceWorker @AssistedInject constructor(
                     call: Call<MissingDeviceListResponse>,
                     response: Response<MissingDeviceListResponse>
                 ) {
-                    //Log.v("MainActivity","remote Response : ${response.raw().code}")
+                    Log.v("MainActivity", "Missing Device Work Running")
                     if (response.isSuccessful) {
                         val body = response.body()
                         if (body != null) {
+                            Log.v("MainActivity", gson.toJson(body))
                             if (body.eventResult.eventresultflag == EventResultFlags.SUCCESS.flag) {
                                 if (body.devicelist.isNotEmpty()) {
                                     if (BleScanner.scanFilter.isNotEmpty()) {
