@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
@@ -21,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -28,6 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.serko.ivocabo.bluetooth.BleScanFilterItem
 import com.serko.ivocabo.bluetooth.BleScanner
@@ -40,6 +43,7 @@ import com.serko.ivocabo.pages.ComposeProgress
 import com.serko.ivocabo.ui.theme.IvocaboTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -112,12 +116,13 @@ class MainActivity : ComponentActivity() {
         }.launchIn(lifecycleScope)
 
         val mdCheckerWorkRequest =
-            PeriodicWorkRequestBuilder<MissingDeviceWorker>(3, TimeUnit.MINUTES).build()
+            PeriodicWorkRequestBuilder<MissingDeviceWorker>(1, TimeUnit.MINUTES).build()
         WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
             "missingdevicecheck",
             ExistingPeriodicWorkPolicy.KEEP,
             mdCheckerWorkRequest
         )
+
 
         bleScanner = BleScanner(applicationContext)
 
@@ -127,12 +132,22 @@ class MainActivity : ComponentActivity() {
             ) {
                 // A surface container using the 'background' color from the theme
                 val scope = rememberCoroutineScope()
+
                 val composeProgressDialogStatus = remember { mutableStateOf(false) }
                 val deviceScanListResult =
                     bleScanViewModel.scanDevices().collectAsStateWithLifecycle(
                         initialValue = emptyList()
                     )
                 LaunchedEffect(Unit) {
+                    WorkManager.getInstance(applicationContext)
+                        .getWorkInfoByIdFlow(mdCheckerWorkRequest.id).collect {
+                        if (it != null)
+                            Log.v(
+                                "MissingDeviceWorker",
+                                "workmanager state : ${it.state}"
+                            )
+                    }
+
 
                     while (true) {
                         when (deviceScanListResult.value.isEmpty()) {

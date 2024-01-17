@@ -1,0 +1,113 @@
+<resources>
+    <string name="app_name">Ivocabo</string>
+    <string name="dbname">ivocabodb.db</string>
+    <string name="privacypolicyurl">https://www.ivocabo.com/mobilappgizlilikpolitikasi</string>
+    <string name="signupTitle">Yeni Üye</string>
+    <string name="username">Kullanıcı Adı</string>
+    <string name="email">Email</string>
+    <string name="required">* zorunlu</string>
+    <string name="password">Şifre</string>
+    <string name="cancel">İptal</string>
+    <string name="save">Kaydet</string>
+    <string name="removefromscanlist">Tarama Listesinden Kaldır</string>
+    <string name="ireadandunderstand">okudum ve anladım</string>
+    <string name="iunderstand">Anlıyorum.</string>
+    <string name="ok">Tamam</string>
+    <string name="signupprivacypolicybutton">Gizlilik Politikası</string>
+    <string name="signuppleasedisplayandreadprivacy">Lütfen gizlilik politikasını görüntüleyin ve okuyun!</string>
+    <string name="limit">Limit</string>
+    <string name="signin">Kayıt Ol</string>
+    <string name="signinTitle">Kayıt Ol</string>
+    <string name="rgResultDialogTitle">Kullanıcı Kaydı</string>
+    <string name="rgResultDialogContent">Tebrikler, üyelik işleminiz başarıyla tamamlandı, lütfen giriş yapın.</string>
+    <string name="deviceformTitle">Ivocabo Cihaz Formu</string>
+    <string name="name">Adı</string>
+    <string name="macaddress">MAC Adresi</string>
+    <string name="t3device">T3</string>
+    <string name="e9device">E9</string>
+    <string name="title_activity_splash">SplashActivity</string>
+    <string name="mac001">Mac Adresi geçerli değil. Lütfen tekrar kontrol edin.</string>
+    <!--Start::Add Device Remote Event Error Messages-->
+    <string name="DR015">Yeni cihaz eklenemiyor!</string>
+    <string name="DR015_3">Bu cihaz hala kullanılıyor!</string>
+    <string name="DR015_2">Mac adresi geçerli değil!</string>
+    <string name="DR018">Yeni Mac adresi geçerli değil!</string>
+    <string name="DR017">Cihaz güncellenemiyor!</string>
+    <string name="DR013">Kullanıcı bulunamadı!</string>
+    <string name="DR010">DeviceAddUpdate genel istisnası</string>
+    <!--End::Add Device Remote Event Error Messages-->
+    <!--Start::Device Dashboard-->
+    <string name="tracking">Takip %s</string>
+    <string name="trackingnotification">Takip\nBildirim</string>
+    <string name="findmydevice">Bul %s</string>
+    <string name="missing">Kayıp</string>
+    <!--End::Device Dashboard-->
+    <string name="enablebluetooth">Lütfen hücresel cihazınızın bluetooth\'unu etkinleştirin!</string>
+    <!--Start::Notification Details-->
+    <string name="ntf_title">Ivocabo Cihaz Takip Uyarısı</string>
+    <string name="ntf_summary">%s ulaşılamadı!</string>
+    <string name="ntf_bigtext">%s adlı cihaza ulaşılamıyor, son kayıp konumu kaydedildi.</string>
+    <string name="ntf_bigtextstillconnected">%s cihazı hala bağlı.</string>
+    <string name="ntf_scanning">%s cihazı tarıyor...</string>
+    <!--End::Notification Details-->
+    <!--Start::Find My Device-->
+    <string name="findmydevicetitle">Cihazımı Bul</string>
+    <string name="scanning">Tarama...</string>
+    <string name="devicefind">Cihaz Bul</string>
+    <string name="devicename">Cihaz Adı</string>
+    <string name="distancefromdevice">Cihazdan Uzaklık</string>
+    <string name="distancefromdevicewarning">Cihaz yukarıda verilen çap dahilindedir.</string>
+
+
+    <!--End::Find My Device-->
+    <!--Start::Track My Device-->
+    <string name="trackmydevicetitle">Cihazımı Takip Et</string>
+    <string name="connectingtodevice">Lütfen bekleyin, cihaza bağlanılıyor.</string>
+    <string name="deviceconnected">Cihaz bağlandı.</string>
+    <string name="devicestillconnected">Cihaz hâlâ bağlı.</string>
+    <string name="deviceconnectionislost">Cihaz bağlantısı kesildi.</string>
+    <string name="devicecannotbereached">Cihaza ulaşılamıyor.</string>
+    <!--End::Track My Device-->
+    <!--Start::Bluetooth Permission-->
+    <string name="alrtbluetoothtitle">Bluetooth ve Yakındaki İzin</string>
+    <string name="alrtbluetoothwarningtext">Uygulamanın ana işlevini yerine getirebilmesi için Bluetooth &amp; Yakındaki izinler.</string>
+    <string name="alrtbluetoothdeniedtext">Bluetooth ve Yakındaki izinler reddedildi, lütfen bu ayarları cihaz ayarlarındaki uygulama izinlerinden sağlayın.</string>
+    <!--End::Bluetooth Permission-->
+    <!--Start::Notification Permission-->
+    <string name="alrtnotificationtitle">Bildirim İzni</string>
+    <string name="alrtnotificationwarningtext">Cihaz takibinin size uygulama içinden bildirim gönderebilmesi için izninize ihtiyacı var.</string>
+    <string name="alrtnotificationdeniedtext">Bildirim izni reddedildi, etkinleştirmek için uygulama ayarlarına gidin.</string>
+    <!--End::Notification Permission-->
+    <!--Start::Profile-->
+    <string name="prf_title">Kişisel Detaylar</string>
+    <string name="prf_removeuser">Kullanıcıyı Kaldır</string>
+    <string name="prf_signout">Oturumu Kapat</string>
+    <string name="prf_privacypolicy">Gizlilik Politikası</string>
+    <!--End::Profile-->
+    <!--Start::Preference-->
+    <string name="pre_preferencetitle">Tercih</string>
+    <string name="pre_locationpermission">Konum İzni</string>
+    <string name="pre_permissionratio">İzin reddedilirse lütfen cihazın uygulama ayarlarından ayarlayın!</string>
+    <string name="pre_bluetoothpermission">Bluetooth İzni</string>
+    <string name="pre_notificationpermission">Bildirim İzni</string>
+    <string name="pre_privacypolicysubmitstamp">Gizlilik Politikası Gönderim Tarihi</string>
+    <string name="pre_language">Diller</string>
+    <string name="pre_tr">TR</string>
+    <string name="pre_en">EN</string>
+    <!--End::Preference-->
+    <!--Start::Location Permission-->
+    <string name="pms_locationtitle">Konum İzni</string>
+    <string name="pms_locationrationale">Doğru bilgi sağlamak ve konum tabanlı hizmetlerimizle deneyiminizi geliştirmek için Ivocabo\'nun konumunuza erişmesine izin verin. Ivocabo cihazının menzil dışına çıktığında bile bilinen son konumunu takip etmek için konum takibini kullanıyoruz. Bu, işaretçiye yakın olduğunuzda size ilgili bildirimleri ve güncellemeleri sağlayabilmemizi sağlamamıza yardımcı olur. Konum verilerinizin yalnızca uygulama içinde kullanılacağından ve üçüncü taraflarla paylaşılmayacağından emin olabilirsiniz. Gizliliğiniz ve veri güvenliğiniz en önemli önceliklerimizdir.</string>
+    <string name="pms_locationdenied">We need your permission because we need to monitor the connection between your phone and the Ivocabo device, even when the app is not in use or closed. This allows us to notify you when the connection with the Ivocabo device is lost and provide its last known location. By granting location permission, you can access the device\'s location information even if you miss the notification. Rest assured that we respect your privacy and ensure that your location data is used solely for these purposes. Your personal data will never be sold or shared for any purpose facilitating sale. For more information about how we handle your data, please review our privacy policy.</string>
+    <!--End::Location Permission-->
+    <!--Start::Bluetooth Permission-->
+    <string name="pms_bluetoothtitle">Bluetooth İzni</string>
+    <string name="pms_bluetoothrationale">Ivocabo\'nun yakındaki ve Ivocabo cihazlarının göreceli konumunu bulmasına ve belirlemesine izin verilsin mi?</string>
+    <string name="pms_bluetoothdenied">Ivocabo\'ya bağlanmak için Bluetooth bağlantısı gereklidir. Bu bağlantı sizin onayınıza bağlı olduğundan cep telefonunuzun ayarlarından uygulama bilgilerini girmenizi ve Bluetooth izinlerini manuel olarak vermenizi rica ederiz.</string>
+    <!--End::Bluetooth Permission-->
+    <!--Start::Notification Permission-->
+    <string name="pms_notificationtitle">Bildirim İzni</string>
+    <string name="pms_notificationrationale">Bu hizmetin, Ivocabo cihazını takip ederken bağlantı kesintilerini size bildirmesine izin vermelisiniz. Cep telefonunuzun ayarlarından uygulama bilgilerine giderek izinler sekmesinden bildirimlere izin vermenizi rica ederiz.</string>
+    <string name="pms_notificationdenied">Bildirim İzni reddedildi. Bu hizmetin, Ivocabo cihazını izlerken bağlantı kesintilerini size bildirmesine izin vermelisiniz. Cep telefonunuzun ayarlarından uygulama bilgilerine giderek izinler sekmesinden bildirimlere izin vermenizi rica ederiz.</string>
+    <!--End::Notification Permission-->
+</resources>
